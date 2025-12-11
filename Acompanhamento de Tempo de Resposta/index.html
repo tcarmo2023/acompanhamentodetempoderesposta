@@ -1,0 +1,3389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Acompanhamento - Tempo de Resposta</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #34495e;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .navbar {
+            background: #f5a623;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            justify-content: space-between;
+        }
+        .navbar .logo { height: 32px; width: auto; }
+        .navbar h1 { color: #000; font-size: 1.25rem; font-weight: 700; }
+        .userbar { background: #f5a623; border-radius: 10px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 10px; }
+        .user-chip { color: #000; font-weight: 700; }
+        .admin-badge { background: rgba(255,255,255,0.65); color: #000; padding: 4px 10px; border-radius: 14px; font-weight: 700; }
+        .logout-btn { background: #d9534f; color: #fff; border: none; border-radius: 8px; padding: 6px 10px; cursor: pointer; display:flex; align-items:center; gap:6px; }
+        .logout-btn:hover { background: #c9302c; }
+        .logout-btn.learn-more { position: relative; display: inline-block; cursor: pointer; outline: none; border: 0; vertical-align: middle; text-decoration: none; background: transparent; padding: 0; font-size: .9rem; font-family: inherit; width: 6.5rem; height: 2.6rem; border-radius: 0; }
+        .logout-btn.learn-more .circle { transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1); position: relative; display: block; margin: 0; width: 2.6rem; height: 2.6rem; background: #d9534f; border-radius: 1.4rem; }
+        .logout-btn.learn-more .circle .icon { transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1); position: absolute; top: 0; bottom: 0; margin: auto; background: #fff; }
+        .logout-btn.learn-more .circle .icon.arrow { transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1); left: 0.525rem; width: 1rem; height: 0.125rem; background: none; }
+        .logout-btn.learn-more .circle .icon.arrow::before { position: absolute; content: ""; top: -0.26rem; right: 0.05rem; width: 0.55rem; height: 0.55rem; border-top: 0.125rem solid #fff; border-right: 0.125rem solid #fff; transform: rotate(45deg); }
+        .logout-btn.learn-more .button-text { transition: all 0.45s cubic-bezier(0.65, 0, 0.076, 1); position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 0.6rem 0; margin: 0 0 0 1.6rem; color: #fff; font-weight: 700; line-height: 1.6; text-align: center; text-transform: none; }
+        .logout-btn.learn-more:hover .circle { width: 100%; }
+        .logout-btn.learn-more:hover .circle .icon.arrow { background: #fff; transform: translate(1rem, 0); }
+        .logout-btn.learn-more:hover .button-text { color: #fff; }
+        
+        .nav-tabs {
+            display: flex;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            padding: 0 2rem;
+        }
+        
+        .nav-tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        .nav-tab.active {
+            border-bottom-color: var(--secondary);
+            color: var(--secondary);
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 2rem;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .filters {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .btn-clear { background: var(--danger); }
+        .btn-clear:hover { background: #c0392b; }
+        
+        .filter-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--dark);
+        }
+        
+        select, input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .notif-container { position: fixed; right: 24px; top: 220px; display: flex; flex-direction: column; gap: 10px; z-index: 50; }
+        .notif-card { background: #fff; border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 12px rgba(0,0,0,0.12); border-left: 6px solid var(--danger); min-width: 320px; max-width: 360px; }
+        .notif-title { font-weight: 700; color: #333; margin-bottom: 6px; }
+        .notif-close { background: transparent; border: none; color: #666; cursor: pointer; font-weight: 700; }
+        .notif-header { display:flex; align-items:center; justify-content: space-between; }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-left: 0;
+            transform: translateY(0);
+            transition: transform 200ms ease, box-shadow 200ms ease;
+            animation: fadeUp 400ms ease both;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .card.danger { border-left-color: transparent; }
+        
+        .card.warning { border-left-color: transparent; }
+        
+        .card.success { border-left-color: transparent; }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--secondary);
+            transition: width 200ms ease, filter 200ms ease, opacity 200ms ease;
+            opacity: 0.95;
+        }
+        .card.danger::before { background: linear-gradient(180deg, #ff6b6b, #e74c3c); }
+        .card.success::before { background: linear-gradient(180deg, #2ecc71, #27ae60); }
+        .card.warning::before { background: linear-gradient(180deg, #f1c40f, #f39c12); }
+        .cards-grid .card:hover::before { width: 8px; filter: brightness(1.08); }
+
+        .card h3 {
+            color: var(--dark);
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            animation: titlePulse 1200ms ease-in-out infinite;
+            transition: transform 200ms ease;
+        }
+        
+        .card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            transition: transform 200ms ease;
+        }
+        
+        .card .subtitle {
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .cards-grid .card:hover { transform: translateY(-4px); box-shadow: 0 8px 14px rgba(0,0,0,0.12); }
+        .cards-grid .card:hover .value { transform: scale(1.05); }
+        .cards-grid .card:hover h3 { transform: translateX(2px); }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes titlePulse { 0% { opacity: 0.85; } 50% { opacity: 1; } 100% { opacity: 0.85; } }
+        .cards-grid .card:nth-child(1){ animation-delay: 0ms; }
+        .cards-grid .card:nth-child(2){ animation-delay: 60ms; }
+        .cards-grid .card:nth-child(3){ animation-delay: 120ms; }
+        .cards-grid .card:nth-child(4){ animation-delay: 180ms; }
+        .cards-grid .card:nth-child(5){ animation-delay: 240ms; }
+        .cards-grid .card:nth-child(6){ animation-delay: 300ms; }
+        .cards-grid .card:nth-child(7){ animation-delay: 360ms; }
+        .cards-grid .card:nth-child(8){ animation-delay: 420ms; }
+        .cards-grid .card:nth-child(9){ animation-delay: 480ms; }
+        .cards-grid .card:nth-child(10){ animation-delay: 540ms; }
+        
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        table {
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        th { text-align: center; }
+        td { text-align: left; vertical-align: middle; line-height: 1.4; }
+        
+        th {
+            background: var(--light);
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        
+        .atraso {
+            color: var(--danger);
+            font-weight: bold;
+        }
+        
+        .no-atraso {
+            color: var(--success);
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            background: var(--secondary);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: var(--primary);
+        }
+        .btn i { margin-right: 6px; }
+        .btn-primary { background: #f5a623; color: #fff; }
+        .btn-info { background: transparent; color: #f5a623; border: 2px solid #f5a623; }
+        .btn-secondary { background: #fff; color: #222; border: 1px solid #dcdcdc; box-shadow: 0 1px 3px rgba(0,0,0,0.08); transition: all .2s ease; }
+        .btn-secondary:hover { background: #f7f7f7; color: #222; box-shadow: 0 3px 10px rgba(0,0,0,0.15); transform: translateY(-1px); }
+        .btn-secondary:active { transform: translateY(0); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+        .table-scroll {
+            overflow: auto;
+            max-height: 480px;
+            border-radius: 10px;
+            position: relative;
+            background: white;
+        }
+        .table-scroll table { border-collapse: separate; border-spacing: 0; width: max-content; table-layout: fixed; }
+        .table-scroll thead { position: sticky; top: 0; z-index: 15; background: var(--light); }
+        .table-scroll thead th { position: sticky; top: 0; background: var(--light); z-index: 20; box-shadow: 0 2px 0 rgba(0,0,0,0.06); color: var(--dark); font-weight: 600; }
+        .consulta-table th.sticky { position: sticky !important; top: 0 !important; z-index: 20 !important; background: var(--light) !important; }
+
+        table {
+            table-layout: fixed;
+        }
+
+        th.sticky {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: var(--light);
+            box-shadow: 0 2px 0 rgba(0,0,0,0.05);
+        }
+        .table-scroll thead th { position: sticky; top: 0; background: var(--light); z-index: 6; }
+
+        .col-cliente { min-width: 260px; }
+        .col-consultor { min-width: 280px; }
+        .col-enc { min-width: 220px; white-space: nowrap; overflow: visible; }
+        .col-di { min-width: 220px; white-space: nowrap; }
+        .col-tempo { min-width: 120px; }
+        .col-num { text-align: center; }
+
+        tbody tr:nth-child(even) { background: #fafafa; }
+
+        .col-comentario {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: normal;
+            line-height: 1.3;
+            cursor: pointer;
+        }
+
+        .consultor-cell { line-height: 1.2; }
+        .data-dupla { display: inline-block; line-height: 1.2; }
+
+        /* --- Otimização específica da matriz da Aba Área de Consulta --- */
+        .consulta-table table { table-layout: fixed; width: max-content; border-collapse: separate; border-spacing: 0; }
+        .consulta-table th.sticky, .consulta-table thead th { position: sticky; top: 0; z-index: 7; background: var(--light); }
+        .consulta-table th, .consulta-table td { padding: 10px 10px; font-size: 13px; line-height: 1.2; text-align: center; vertical-align: middle; }
+        .consulta-table tbody tr:nth-child(even) { background: #fafafa; }
+        .consulta-table .col-evento { min-width: 100px; text-align: center; }
+        .consulta-table .col-cliente { min-width: 260px; }
+        .consulta-table .col-status { min-width: 120px; text-align: center; }
+        .consulta-table .col-consultor { min-width: 280px; }
+        .consulta-table .col-empresa { min-width: 160px; white-space: nowrap; }
+        .consulta-table .col-di { min-width: 200px; white-space: normal; }
+        .consulta-table .col-enc { min-width: 220px; white-space: normal; }
+        .consulta-table .col-datas { min-width: 240px; }
+        .consulta-table .col-tempo { min-width: 120px; text-align: center; white-space: nowrap; }
+        .consulta-table .col-num { text-align: center; min-width: 80px; }
+        .consulta-table .col-situacao { min-width: 120px; text-align: center; white-space: nowrap; }
+        .consulta-table .col-comentario {
+            width: 150px !important;
+            min-width: 150px !important;
+            max-width: 150px !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: normal;
+        }
+        .consulta-table th.col-comentario, .consulta-table td.col-comentario { padding: 0 4px !important; }
+        .consulta-table td.col-comentario { text-align: left !important; color: transparent !important; }
+        .situacao-parado { background: #e53935; color: #fff; padding: 2px 6px; border-radius: 6px; }
+        .situacao-andamento { background: #b8860b; color: #fff; padding: 2px 6px; border-radius: 6px; }
+        .status-badge { background: #b8860b; color: #fff; padding: 2px 6px; border-radius: 6px; display: inline-block; }
+        .consulta-table .status-prazo { white-space: nowrap; display: inline-block; }
+
+        .column-controls { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+        .column-controls label { color: #555; }
+        .column-controls select { padding: 6px; border: 1px solid #ddd; border-radius: 6px; }
+        .column-controls .btn { padding: 6px 10px; }
+        .chart-container { width: 100%; box-sizing: border-box; margin: 24px 0; }
+        .chart-box { max-height: 300px; }
+        .chart-box canvas { height: 220px !important; width: 100% !important; }
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-top: 40px; }
+        .charts-row .chart-container { min-width: 0; }
+        .table-scroll { margin-bottom: 24px; }
+        @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+        #graficoEventos { height: 260px !important; }
+        #graficoPrazoConsultor, #graficoConsultores { height: 220px !important; }
+        .consulta-table th { position: sticky; }
+        .consulta-table th .resize-handle { position: absolute; right: 0; top: 0; width: 6px; height: 100%; cursor: col-resize; }
+
+        #modalOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 10px;
+            max-width: 900px;
+            max-height: 70vh;
+            overflow: auto;
+            border: 1px solid #ececec;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            animation: modalPop .22s ease-out;
+            transition: box-shadow .2s ease, transform .2s ease;
+        }
+        .modal:hover { box-shadow: 0 16px 36px rgba(0,0,0,0.25); transform: translateY(-1px); }
+        @keyframes modalPop { from { transform: scale(0.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; background:#f5a623; color:#fff; padding:10px; font-weight:700; border-radius:10px 10px 0 0; margin:-24px -24px 0 -24px; }
+        .login-card { width: 380px; background: rgba(255,255,255,0.95); padding: 18px; border-radius: 12px; box-shadow: 0 8px 26px rgba(0,0,0,0.18); backdrop-filter: blur(2px); }
+        .login-header { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .login-title { font-size: 1.5rem; font-weight: 600; color: #000; }
+        .login-label { font-size: .9rem; color: #000; margin: 12px 0 6px; }
+        .login-input { width: 100%; padding: 10px; border: 1px solid #dcdcdc; border-radius: 8px; outline: none; }
+        .login-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+        .login-btn-primary { background: #f5a623; color: #fff; border: none; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; }
+        .login-btn-outline { background: transparent; color: #f5a623; border: 2px solid #f5a623; border-radius: 8px; padding: 10px; font-weight: 600; cursor: pointer; }
+        .login-links { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+        .login-link { color: #2c3e50; text-decoration: none; font-weight: 600; }
+        .app-footer { background: #2f3b45; color: #eaeaea; padding: 12px; text-align: center; margin-top: auto; }
+        .footer-row { display: flex; gap: 16px; justify-content: center; align-items: center; flex-wrap: wrap; }
+        .footer-link { color: #eaeaea; text-decoration: none; transition: color .2s ease; }
+        .footer-link:hover { color: #fff; text-decoration: underline; }
+        .footer-row span { transition: transform .2s ease; }
+        .footer-row span:hover { transform: translateY(-1px); }
+        .footer-row i { margin-right: 6px; }
+        .whats-btn { background: #25d366; color: #fff; border: none; border-radius: 8px; padding: 8px 12px; font-weight: 600; cursor: pointer; }
+        .login-footer { position: absolute; bottom: 0; left: 0; right: 0; background: #2f3b45; color: #eaeaea; padding: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <img class="logo" src="./Nova pasta/Imagem5.png" alt="Logo">
+            <h1>⏱️ Sistema de Acompanhamento - Tempo de Resposta</h1>
+        </div>
+        <div id="userBar" class="userbar" style="display:none;"></div>
+    </div>
+
+    <div class="nav-tabs">
+        <div class="nav-tab active" onclick="openTab('dashboard')">📊 Dashboard</div>
+        <div class="nav-tab" onclick="openTab('consulta')">🔍 Área de Consulta</div>
+        <div class="nav-tab" id="adminTab" onclick="openTab('admin')">⚙️ Administrador</div>
+    </div>
+
+    <div id="loginOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background-image:url('./Nova pasta/jcb-excavator.jpg');background-size:cover;background-position:center;z-index:1000;">
+        <div class="login-card">
+            <div class="login-header">
+                <img src="./Nova pasta/Imagem5.png" alt="Logo" style="height:50px;"/>
+                <div class="login-title" style="text-align:center;">Sistema de Tempo de Resposta</div>
+            </div>
+            <div class="login-label">Usuário</div>
+            <input id="loginUsuario" class="login-input" type="text" placeholder="Digite seu usuário" />
+            <div class="login-label">Senha</div>
+            <input id="loginSenha" class="login-input" type="password" placeholder="Digite sua senha" />
+            <div class="login-actions">
+                <button class="btn btn-primary" id="loginBtn" onclick="submitLogin()"><i class="fas fa-sign-in-alt"></i> Entrar</button>
+                <button class="btn btn-info" id="infoBtn" onclick="abrirInformacoes()"><i class="fas fa-info-circle"></i> Informações</button>
+                <button class="btn btn-secondary" id="resetPasswordBtn" onclick="abrirResetSenha()"><i class="fas fa-key"></i> Resetar Senha</button>
+                <button class="btn btn-secondary" id="signupBtn" onclick="abrirCadastroCodigo()"><i class="fas fa-user-plus"></i> Cadastrar Usuário</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ABA DASHBOARD -->
+    <div id="dashboard" class="tab-content active">
+        <div class="filters">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Ano</label>
+                    <select id="filterAno">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Mês</label>
+                    <select id="filterMes">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Revenda</label>
+                    <select id="filterEmpresa">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="filterStatus">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Situação Evento</label>
+                    <select id="filterSituacao">
+                        <option value="">Todas</option>
+                        <option value="Parado">Parado</option>
+                        <option value="Em Andamento">Em Andamento</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Status Prazo</label>
+                    <select id="filterStatusPrazo">
+                        <option value="">Todos</option>
+                        <option value="Dentro do Prazo">Dentro do Prazo</option>
+                        <option value="Fora do Prazo">Fora do Prazo</option>
+                    </select>
+                </div>
+            </div>
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Evento</label>
+                    <input type="text" id="filterEvento" placeholder="Filtrar por evento...">
+                </div>
+                <div class="filter-group">
+                    <label>Consultor</label>
+                    <select id="filterConsultor">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <div class="btn-row">
+                        <button class="btn" onclick="carregarDados()">🔍 Aplicar Filtros</button>
+                        <button class="btn" onclick="limparFiltrosDashboard()">🧹 Limpar Filtros</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cards-grid" id="cardsContainer">
+            <div class="loading">Carregando dados...</div>
+        </div>
+
+        <div id="notifContainer" class="notif-container"></div>
+
+        <div class="chart-container">
+            <h3>📝 Eventos Atrasados</h3>
+            <div id="tabelaAtrasosDashboard"><div class="loading">Carregando atrasos...</div></div>
+        </div>
+
+        <div class="charts-row">
+            <div class="chart-container chart-box">
+                <h3>📊 Dentro x Fora do Prazo por Consultor</h3>
+                <canvas id="graficoPrazoConsultor"></canvas>
+            </div>
+            <div class="chart-container chart-box">
+                <h3>📈 Tempo Médio de Resposta por Consultor</h3>
+                <canvas id="graficoConsultores"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container chart-box">
+            <h3>📅 Total de Eventos por Mês</h3>
+            <canvas id="graficoEventos"></canvas>
+        </div>
+    </div>
+    <!-- ABA CONSULTA -->
+        <div id="consulta" class="tab-content">
+            <div class="filters">
+                <div class="filter-row">
+                    <div class="filter-group">
+                        <label>Status Prazo</label>
+                        <select id="consultaStatusPrazo">
+                            <option value="">Todos</option>
+                            <option value="Dentro do Prazo">Dentro do Prazo</option>
+                            <option value="Fora do Prazo">Fora do Prazo</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Situação Evento</label>
+                        <select id="consultaSituacao">
+                            <option value="">Todas</option>
+                            <option value="Parado">Parado</option>
+                            <option value="Em Andamento">Em Andamento</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Evento</label>
+                        <input type="text" id="consultaEvento" placeholder="Filtrar evento...">
+                    </div>
+                    <div class="filter-group">
+                        <label>Cliente</label>
+                        <input type="text" id="consultaCliente" placeholder="Filtrar cliente...">
+                </div>
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="consultaStatus">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+            </div>
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>Consultor</label>
+                    <select id="consultaConsultor">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Empresa</label>
+                    <select id="consultaEmpresa">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <div class="btn-row">
+                        <button class="btn" onclick="carregarConsulta()">🔍 Buscar</button>
+                        <button class="btn btn-clear" onclick="limparFiltrosConsulta()">🧹 Limpar Filtros</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabelaConsulta">
+            <div class="loading">Carregando dados da consulta...</div>
+        </div>
+    </div>
+
+    <!-- ABA ADMIN -->
+    <div id="admin" class="tab-content">
+        <div class="nav-tabs">
+            <div class="nav-tab admin-tab active" onclick="openAdminTab('adminUsuarios')">👤 Cadastro de Usuário</div>
+            <div class="nav-tab admin-tab" onclick="openAdminTab('adminAlertas')">🔔 Cadastrar Alerta</div>
+        </div>
+        <div id="adminUsuarios" class="tab-content admin-content active">
+            <div class="card" style="margin-bottom:16px;">
+                <h3>👤 Cadastrar Novo Usuário</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <div class="login-label">Nome Completo *</div>
+                        <input id="adminCadastroNome" class="login-input" type="text" placeholder="Ex.: João da Silva" />
+                    </div>
+                    <div>
+                        <div class="login-label">Usuário *</div>
+                        <input id="adminCadastroUsuario" class="login-input" type="text" placeholder="Ex.: joao.silva" />
+                    </div>
+                    <div>
+                        <div class="login-label">E-mail *</div>
+                        <input id="adminCadastroEmail" class="login-input" type="email" placeholder="email@exemplo.com" />
+                    </div>
+                    <div>
+                        <div class="login-label">Tipo de Usuário *</div>
+                        <select id="adminCadastroTipo" class="login-input">
+                            <option value="Usuário">Usuário</option>
+                            <option value="Gestor">Gestor</option>
+                            <option value="Administrador">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:8px;">
+                    <button class="login-btn-primary" onclick="criarUsuarioAdmin()">Cadastrar Usuário</button>
+                    <button class="btn" onclick="limparCadastroAdmin()">Limpar</button>
+                </div>
+                <div style="margin-top:8px;color:#555;font-size:.9rem;">Senha padrão: NMQ@123 • No primeiro login será solicitada a troca.</div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <h3>🧾 Usuários Cadastrados</h3>
+                <div id="usuariosCadastradosLista" class="table-scroll"></div>
+            </div>
+        </div>
+        <div id="adminAlertas" class="tab-content admin-content">
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="color:#000;">🔔 Configuração de Alertas</h3>
+                <div class="login-label">Usuário Responsável</div>
+                <select id="alertUsuarioSelect" class="login-input"></select>
+                <div class="login-label">E-mail para Notificações</div>
+                <input id="alertEmail" class="login-input" type="email" placeholder="Digite o e-mail" />
+                <div class="login-label">Dias para Alerta de Evento</div>
+                <input id="alertDias" class="login-input" type="number" min="1" value="5" />
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="login-btn-primary" onclick="salvarAlertaAdmin()">Configurar Alerta</button>
+                    <button class="btn" onclick="enviarEmailTesteAdmin()">Enviar e-mail de teste</button>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="color:#000;">🚀 Disparo e Agendamento</h3>
+                <div class="login-label">Selecionar Usuários</div>
+                <select id="alertUsuariosMulti" class="login-input" multiple style="height:120px"></select>
+                <div class="login-label">Incluir Gestora (Graziela)</div>
+                <select id="alertIncludeGestora" class="login-input"><option value="true">Sim</option><option value="false">Não</option></select>
+                <div class="login-label">E-mail destino (override)</div>
+                <input id="alertCustomEmail" class="login-input" type="email" placeholder="Digite o e-mail destino" />
+                <div class="login-label">Agendar diário às</div>
+                <input id="alertScheduleTime" class="login-input" type="time" value="08:00" />
+                <div class="login-label">Modo de envio</div>
+                <select id="alertModoEnvio" class="login-input">
+                    <option value="novos">Somente itens novos (deduplicado)</option>
+                    <option value="completo">Resumo completo de abertos (ignorar deduplicação)</option>
+                </select>
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="login-btn-primary" onclick="enviarAlertasSelecionados()">Enviar agora</button>
+                    <button class="btn" onclick="previewAlertasSelecionados()">Pré-visualizar</button>
+                    <button class="btn" onclick="salvarAgendamentoAlertas()">Salvar agendamento</button>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="color:#000;">🗓️ Histórico de Agendamentos</h3>
+                <div id="agendamentoHistoricoLista" class="table-scroll"></div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="color:#000;">📋 Alertas Ativos</h3>
+                <div id="alertasAtivosLista" class="table-scroll"></div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="color:#000;">✉️ Histórico de Notificações</h3>
+                <div id="historicoNotificacoesLista" class="table-scroll"></div>
+            </div>
+        </div>
+    </div>
+    <footer class="app-footer">
+        <div class="footer-row">
+            <span><i class="fas fa-phone-alt"></i> <a class="footer-link" href="tel:+5581995143900">(81) 99514-3900</a></span>
+            <span><i class="fas fa-envelope"></i> <a class="footer-link" href="mailto:thiago.carmo@normaq.com.br">thiago.carmo@normaq.com.br</a></span>
+            <span><i class="fab fa-whatsapp"></i> <a class="footer-link" href="https://wa.me/5581995143900" target="_blank">WhatsApp</a></span>
+        </div>
+        <div style="margin-top:6px;">© 2025 NORMAQ JCB – Todos os direitos reservados • Versão 1.0</div>
+        <div style="margin-top:4px;">Desenvolvido por Thiago Carmo – Especialista em Dados e Desenvolvedor</div>
+    </footer>
+
+    <!-- MODAL GLOBAL -->
+    <div id="modalOverlay" onclick="fecharModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div id="modalContent"></div>
+            <div style="margin-top: 1rem; text-align: right;">
+                <button class="btn" onclick="fecharModal()">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO ---
+        const supabaseUrl = 'https://jnbirdxgllehrikluftu.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpuYmlyZHhnbGxlaHJpa2x1ZnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMDcxNTgsImV4cCI6MjA3NjU4MzE1OH0.OG4LjCJFAvOl0IOIrPlL3wZ4f7EeDcO-rUZ3dDIOqi4';
+        
+        const supabase = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+        const tabelaBase = 'Usuário Comentário';
+        const TABELA_USUARIOS = 'usuarios_auth';
+        const RESET_TOKENS_TABELA = 'reset_senha_tokens';
+        const ALERTAS_CONFIG = 'alertas_configuracao';
+        const HISTORICO_NOTIF = 'historico_notificacao';
+        const ALT_ALERTAS_CONFIG = 'alertas_config';
+        const ALT_HISTORICO_NOTIF = 'historico_notificacoes';
+        const EMAILJS_SERVICE = 'service_25zhgag';
+        const EMAILJS_TEMPLATE = 'template_anjfzws';
+        const EMAILJS_PUBLIC_KEY = 'TEMODpZYq_yR5526T';
+        const USUARIOS_MAP = {
+            'ana.leya': 'Ana Leya Lima Alves Frota',
+            'giovana.silva': 'Giovana Bruno da Silva',
+            'daniel.leite': 'Daniel Leite Pereira',
+            'graziela.galdino': 'Graziela Silva dos Santos Galdino'
+        };
+
+        function getDisplayFirstName(usuarioSel) {
+            const shortMap = { 'ana.leya':'Ana','giovana.silva':'Giovana','daniel.leite':'Daniel','graziela.galdino':'Graziela' };
+            if (shortMap[usuarioSel]) return shortMap[usuarioSel];
+            const long = USUARIOS_MAP[usuarioSel] || usuarioSel;
+            const parts = String(long).trim().split(/\s+/);
+            return parts[0] || String(long);
+        }
+        let _cadastroDesbloqueado = false;
+
+        async function initAuth() {
+            if (!supabase) { alert('Erro: Biblioteca Supabase não carregada. Verifique a conexão com a internet.'); return; }
+            const { data: sessionData } = await supabase.auth.getSession();
+            const overlay = document.getElementById('loginOverlay');
+            const adminTab = document.getElementById('adminTab');
+            if (!sessionData?.session) {
+                overlay.style.display = 'flex';
+                if (adminTab) adminTab.style.display = 'none';
+                return;
+            }
+            overlay.style.display = 'none';
+            openTab('dashboard');
+            aplicarPermissoes(sessionData.session.user);
+            await carregarDadosIniciais();
+            try { await mostrarModalAtrasosUsuario(sessionData.session.user); } catch(_){ }
+            try { renderDashboardNotifs(); } catch(_){ }
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    abrirTrocaSenhaPrimeiroAcesso();
+                }
+            });
+        }
+
+        async function submitLogin() {
+            if (!supabase) { alert('Erro: Supabase não inicializado.'); return; }
+            const entrada = document.getElementById('loginUsuario').value.trim();
+            const senha = document.getElementById('loginSenha').value;
+            if (!entrada || !senha) return;
+            try {
+                let email = '';
+                let usuarioPlano = entrada;
+                if (entrada.includes('@')) {
+                    email = entrada.toLowerCase();
+                } else {
+                    const { data: mapa, error: e1 } = await supabase
+                        .from(TABELA_USUARIOS)
+                        .select('email, usuario')
+                        .ilike('usuario', entrada)
+                        .limit(1);
+                    if (e1) throw e1;
+                    email = Array.isArray(mapa) && mapa[0] ? String(mapa[0].email || '').toLowerCase() : '';
+                    usuarioPlano = Array.isArray(mapa) && mapa[0] ? String(mapa[0].usuario || entrada) : entrada;
+                }
+                if (!email) throw new Error('Usuário não encontrado');
+
+                let { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+                if (error) {
+                    const msg = (error.message || '').toLowerCase();
+                    if (msg.includes('invalid login credentials')) {
+                        const tentativaPadrao = await supabase.auth.signInWithPassword({ email, password: 'NMQ@2025' });
+                        if (!tentativaPadrao.error && tentativaPadrao.data) {
+                            data = tentativaPadrao.data;
+                        } else {
+                            const tentativaAntiga = await supabase.auth.signInWithPassword({ email, password: 'NMQ@123' });
+                            if (!tentativaAntiga.error && tentativaAntiga.data) {
+                                data = tentativaAntiga.data;
+                            } else {
+                                const signup = await supabase.auth.signUp({ email, password: 'NMQ@123', options: { data: { usuario: usuarioPlano, needs_password_change: true } } });
+                                if (signup.error && (signup.error.message || '').toLowerCase().includes('already registered')) {
+                                    abrirResetSenhaPreenchido(email);
+                                    throw new Error('Credenciais inválidas. Envie um link de redefinição.');
+                                }
+                                if (!signup.error) {
+                                    try { await supabase.from(TABELA_USUARIOS).insert({ email, usuario: usuarioPlano }); } catch(_){ }
+                                    alert('Usuário registrado. Verifique o e-mail para confirmação e use a senha padrão NMQ@123 no primeiro acesso.');
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    if (!data) throw error;
+                }
+                document.getElementById('loginOverlay').style.display = 'none';
+                aplicarPermissoes(data.user);
+                if (data.user?.user_metadata?.needs_password_change || senha === 'NMQ@123') abrirTrocaSenhaPrimeiroAcesso('');
+                await carregarDadosIniciais();
+                try { await mostrarModalAtrasosUsuario(data.user); } catch(_){ }
+            } catch(e) { alert('Falha no login: '+(e.message||e)); }
+        }
+
+        function abrirResetSenhaPreenchido(email) {
+            abrirResetSenha();
+            const input = document.getElementById('resetEmail');
+            if (input) input.value = email || '';
+        }
+
+        async function aplicarPermissoes(user) {
+            try {
+                const adminTab = document.getElementById('adminTab');
+                let usuarioNome = '';
+                let tipoUser = '';
+                if (user?.email) {
+                    const { data: mapa } = await supabase.from(TABELA_USUARIOS).select('*').eq('email', user.email).limit(1);
+                    const row = Array.isArray(mapa) && mapa[0] ? mapa[0] : null;
+                    usuarioNome = row ? (row.usuario || '') : '';
+                    tipoUser = row ? (row.tipo_usuario || row.tipo || '') : '';
+                }
+                const isAdmin = (String(tipoUser).toLowerCase() === 'administrador') || usuarioNome === 'thiago.carmo';
+                if (adminTab) adminTab.style.display = isAdmin ? '' : 'none';
+                const adminContent = document.getElementById('admin');
+                if (adminContent) adminContent.style.display = isAdmin ? '' : 'none';
+
+                const ub = document.getElementById('userBar');
+                if (ub) {
+                    ub.style.display = 'inline-flex';
+                    ub.innerHTML = `
+                        <span class="user-chip">${usuarioNome || (user.email || '').split('@')[0]}</span>
+                        ${isAdmin ? '<span class="admin-badge">Administrador</span>' : ''}
+                        <button class="logout-btn learn-more" onclick="sair()">
+                            <span class="circle">
+                                <span class="icon arrow"></span>
+                            </span>
+                            <span class="button-text">Sair</span>
+                        </button>
+                    `;
+                }
+            } catch (_){ }
+        }
+
+        async function sair() {
+            try {
+                await supabase.auth.signOut();
+            } catch(_) {}
+            document.getElementById('loginOverlay').style.display = 'flex';
+            const ub = document.getElementById('userBar');
+            if (ub) { ub.style.display = 'none'; ub.innerHTML = ''; }
+            const adminTab = document.getElementById('adminTab'); if (adminTab) adminTab.style.display = 'none';
+            const adminContent = document.getElementById('admin'); if (adminContent) adminContent.style.display = 'none';
+        }
+
+        function abrirInformacoes() {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-info-circle"></i> Suporte & Informações</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;">
+                    <div style="margin-bottom:8px;color:#333;">Para problemas de acesso:<br/>Entre em contato com o administrador do sistema:</div>
+                    <div style="font-weight:700;color:#333;">Thiago Carmo – Especialista em Dados e Desenvolvedor</div>
+                    <div style="margin:6px 0;color:#333;">☎️ (81) 99514-3900</div>
+                    <div style="margin-top:8px;">
+                        <button class="whats-btn" onclick="window.open('https://wa.me/5581995143900','_blank')">🟢 Abrir WhatsApp</button>
+                    </div>
+                    <div style="margin-top:12px;color:#333;">Horário de atendimento:</div>
+                    <div style="color:#333;">🕘 Segunda a sexta: 8h às 18h</div>
+                    <div style="color:#333;">🕘 Sábado: 8h às 12h</div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function abrirResetSenha() {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-key"></i> Redefinir Senha</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;">
+                    <div style="color:#333;margin-bottom:8px;">Informe seu e-mail cadastrado para receber o link de redefinição.</div>
+                    <div class="login-label">E-mail</div>
+                    <input id="resetEmail" class="login-input" type="email" placeholder="seuemail@empresa.com" />
+                    <div style="margin-top:12px;display:flex;gap:8px;">
+                        <button class="login-btn-primary" onclick="enviarLinkReset()">🔗 Enviar Link</button>
+                    </div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        async function enviarLinkReset() {
+            const email = document.getElementById('resetEmail').value.trim();
+            if (!email) return;
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email);
+                if (error) throw error;
+                await supabase.from(RESET_TOKENS_TABELA).insert({ email, status: 'enviado', requested_at: new Date().toISOString() });
+                alert('Link de redefinição enviado ao e-mail informado.');
+                fecharModal();
+            } catch(e) { alert('Falha ao enviar link: '+(e.message||e)); }
+        }
+
+        function abrirCadastroCodigo() {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            _cadastroDesbloqueado = false;
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-user-plus"></i> Cadastro de Usuário</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;">
+                    <div class="login-label">Código de acesso</div>
+                    <input id="cadastroCodigo" class="login-input" type="text" placeholder="Digite o código" />
+                    <div style="margin-top:12px;">
+                        <button class="login-btn-primary" onclick="desbloquearCadastro()">Desbloquear</button>
+                    </div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function desbloquearCadastro() {
+            const codigo = document.getElementById('cadastroCodigo').value.trim();
+            if (codigo !== 'NMQ@2025') { alert('Código de acesso inválido'); return; }
+            _cadastroDesbloqueado = true;
+            abrirCadastroUsuario();
+        }
+
+        function abrirCadastroUsuario() {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-user-plus"></i> Cadastro de Usuário</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;">
+                    <div class="login-label">E-mail</div>
+                    <input id="cadastroEmail" class="login-input" type="email" placeholder="email@exemplo.com" />
+                    <div class="login-label">Usuário</div>
+                    <input id="cadastroUsuario" class="login-input" type="text" placeholder="usuario" />
+                    <div style="margin-top:12px;">
+                        <button class="login-btn-primary" onclick="criarUsuarioCadastro()">👤 Criar Usuário (senha padrão)</button>
+                    </div>
+                    <div style="margin-top:8px;color:#555;font-size:.9rem;">Senha padrão: NMQ@123. Ao primeiro login, será solicitada troca.</div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        async function criarUsuarioCadastro() {
+            if (!_cadastroDesbloqueado) { alert('Informe o código de acesso para desbloquear o cadastro.'); return; }
+            const email = document.getElementById('cadastroEmail').value.trim();
+            const usuario = document.getElementById('cadastroUsuario').value.trim();
+            if (!email || !usuario) return;
+            try {
+                const { data: signUpData, error } = await supabase.auth.signUp({ email, password: 'NMQ@123', options: { data: { usuario, needs_password_change: true } } });
+                if (error) throw error;
+                await supabase.from(TABELA_USUARIOS).insert({ email, usuario });
+                alert('Usuário cadastrado. Verifique o e-mail para confirmação.');
+                fecharModal();
+            } catch(e) { alert('Falha no cadastro: '+(e.message||e)); }
+        }
+
+        async function criarUsuarioAdmin() {
+            const nome = document.getElementById('adminCadastroNome').value.trim();
+            const email = document.getElementById('adminCadastroEmail').value.trim();
+            const usuario = document.getElementById('adminCadastroUsuario').value.trim();
+            const tipo = document.getElementById('adminCadastroTipo').value || 'Usuário';
+            if (!email || !usuario || !nome) return;
+            try {
+                const { data: signUpData, error } = await supabase.auth.signUp({ email, password: 'NMQ@123', options: { data: { usuario, nome_completo: nome, tipo_usuario: tipo, needs_password_change: true } } });
+                if (error && !String(error.message||'').toLowerCase().includes('already registered')) throw error;
+                let exists = false;
+                try {
+                    const { data: row } = await supabase.from(TABELA_USUARIOS).select('email').eq('email', email).limit(1);
+                    exists = Array.isArray(row) && !!row[0];
+                } catch(_){ }
+                if (exists) {
+                    const { error: eUpd } = await supabase.from(TABELA_USUARIOS).update({ usuario, nome_completo: nome, tipo_usuario: tipo }).eq('email', email);
+                    if (eUpd) throw eUpd;
+                } else {
+                    const { error: eIns } = await supabase.from(TABELA_USUARIOS).insert({ email, usuario, nome_completo: nome, tipo_usuario: tipo, senha: 'NMQ@123' });
+                    if (eIns) throw eIns;
+                }
+                alert('Usuário cadastrado/atualizado. Se novo, verifique o e-mail para confirmação.');
+                await initAdminUsuariosTab();
+            } catch(e) { alert('Falha no cadastro: '+(e.message||e)); }
+        }
+
+        function limparCadastroAdmin() {
+            const ids = ['adminCadastroNome','adminCadastroEmail','adminCadastroUsuario'];
+            ids.forEach(id=>{ const el = document.getElementById(id); if (el) el.value=''; });
+            const tipoEl = document.getElementById('adminCadastroTipo'); if (tipoEl) tipoEl.value = 'Usuário';
+        }
+
+        function abrirTrocaSenhaPrimeiroAcesso(sugestao) {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-lock"></i> Definir Nova Senha</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;">
+                    <div class="login-label">Nova senha</div>
+                    <input id="novaSenha" class="login-input" type="password" placeholder="Digite a nova senha" value="${sugestao || ''}" />
+                    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="login-btn-primary" onclick="confirmarTrocaSenha()">Confirmar</button>
+                        <button class="login-btn-outline" onclick="document.getElementById('novaSenha').value='NMQ@123'">Usar senha padrão NMQ@123</button>
+                    </div>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        async function confirmarTrocaSenha() {
+            const pwd = document.getElementById('novaSenha').value;
+            if (!pwd) return;
+            try {
+                const { error } = await supabase.auth.updateUser({ password: pwd, data: { needs_password_change: false } });
+                if (error) throw error;
+                alert('Senha atualizada com sucesso.');
+                fecharModal();
+            } catch(e) { alert('Falha ao atualizar senha: '+(e.message||e)); }
+        }
+        async function initAdminUsuariosTab() {
+            try {
+                const lista = await fetchUsuariosAuth();
+                renderUsuariosCadastrados(lista);
+            } catch(_){ }
+        }
+        async function fetchUsuariosAuth() {
+            try {
+                const { data } = await supabase.from(TABELA_USUARIOS).select('*').order('usuario');
+                return Array.isArray(data) ? data : [];
+            } catch(_){ return []; }
+        }
+        function renderUsuariosCadastrados(lista) {
+            const cont = document.getElementById('usuariosCadastradosLista');
+            if (!cont) return;
+            const header = `
+                <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr 1fr 1.6fr;gap:8px;background:#f7b733;color:#000;padding:8px 10px;font-weight:700;border-radius:6px;">
+                    <div>Nome</div>
+                    <div>Usuário</div>
+                    <div>E-mail</div>
+                    <div>Tipo</div>
+                    <div>Primeiro Login</div>
+                    <div>Ações</div>
+                </div>
+            `;
+            const rows = (lista||[]).map(r=>{
+                const nome = r.nome_completo || '';
+                const usuario = r.usuario || '';
+                const email = r.email || '';
+                const tipo = r.tipo_usuario || r.tipo || 'Usuário';
+                const primeiroLogin = r.primeiro_login ? 'Sim' : 'Não';
+                return `
+                    <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr 1fr 1.6fr;gap:8px;padding:8px 10px;border-bottom:1px solid #eee;align-items:center;">
+                        <div>${nome}</div>
+                        <div>${usuario}</div>
+                        <div>${email}</div>
+                        <div>${tipo}</div>
+                        <div>${primeiroLogin}</div>
+                        <div style="display:flex;gap:6px;flex-wrap:nowrap;white-space:nowrap;">
+                            <button class="btn btn-warning btn-sm" onclick="editarUsuarioAdmin('${encodeURIComponent(email)}','${encodeURIComponent(usuario)}','${encodeURIComponent(nome)}','${encodeURIComponent(tipo)}')">Editar</button>
+                            <button class="btn btn-danger btn-sm" onclick="excluirUsuarioAdmin('${encodeURIComponent(email)}')">Excluir</button>
+                            <button class="btn btn-sm" onclick="resetarSenhaUsuario('${encodeURIComponent(email)}')">Resetar Senha</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            cont.innerHTML = header + rows;
+        }
+        function editarUsuarioAdmin(emailEnc, usuarioEnc, nomeEnc, tipoEnc) {
+            const email = decodeURIComponent(emailEnc);
+            const usuario = decodeURIComponent(usuarioEnc);
+            const nome = decodeURIComponent(nomeEnc);
+            const tipo = decodeURIComponent(tipoEnc);
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header">
+                    <span><i class="fas fa-user-edit"></i> Editar Usuário</span>
+                    <button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button>
+                </div>
+                <div style="padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <div class="login-label">Nome Completo</div>
+                        <input id="editNomeCompleto" class="login-input" type="text" value="${nome}" />
+                    </div>
+                    <div>
+                        <div class="login-label">Usuário</div>
+                        <input id="editUsuario" class="login-input" type="text" value="${usuario}" />
+                    </div>
+                    <div>
+                        <div class="login-label">E-mail</div>
+                        <input id="editEmail" class="login-input" type="email" value="${email}" />
+                    </div>
+                    <div>
+                        <div class="login-label">Tipo de Usuário</div>
+                        <select id="editTipo" class="login-input">
+                            <option ${tipo==='Usuário'?'selected':''} value="Usuário">Usuário</option>
+                            <option ${tipo==='Gestor'?'selected':''} value="Gestor">Gestor</option>
+                            <option ${tipo==='Administrador'?'selected':''} value="Administrador">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;padding:0 10px 10px;">
+                    <button class="login-btn-primary" onclick="confirmarEdicaoUsuario('${encodeURIComponent(email)}')">Salvar</button>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+        async function confirmarEdicaoUsuario(originalEmailEnc) {
+            const originalEmail = decodeURIComponent(originalEmailEnc);
+            const nome = document.getElementById('editNomeCompleto').value.trim();
+            const usuario = document.getElementById('editUsuario').value.trim();
+            const email = document.getElementById('editEmail').value.trim();
+            const tipo = document.getElementById('editTipo').value || 'Usuário';
+            if (!email || !usuario || !nome) return;
+            try {
+                let ok = false;
+                try { const { error: e1 } = await supabase.from(TABELA_USUARIOS).update({ nome_completo: nome, usuario, email, tipo_usuario: tipo }).eq('email', originalEmail); if (e1) throw e1; ok = true; } catch(_){ }
+                if (!ok) { const { error: e2 } = await supabase.from(TABELA_USUARIOS).update({ usuario, email }).eq('email', originalEmail); if (e2) throw e2; }
+                fecharModal();
+                await initAdminUsuariosTab();
+            } catch(e) { alert('Falha ao salvar: '+(e.message||e)); }
+        }
+        async function excluirUsuarioAdmin(emailEnc) {
+            const email = decodeURIComponent(emailEnc);
+            try {
+                const { error } = await supabase.from(TABELA_USUARIOS).delete().eq('email', email);
+                if (error) throw error;
+                await initAdminUsuariosTab();
+            } catch(e) { alert('Falha ao excluir: '+(e.message||e)); }
+        }
+        async function resetarSenhaUsuario(emailEnc) {
+            const email = decodeURIComponent(emailEnc);
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email);
+                if (error) throw error;
+                alert('E-mail de redefinição enviado.');
+            } catch(e) { alert('Falha ao resetar senha: '+(e.message||e)); }
+        }
+        
+        let dadosCompletos = [];
+        let graficoEventos, graficoConsultores;
+        const valueLabelPlugin = {
+            id: 'valueLabelPlugin',
+            afterDatasetsDraw(chart) {
+                const { ctx } = chart;
+                chart.data.datasets.forEach((dataset, i) => {
+                    const meta = chart.getDatasetMeta(i);
+                    meta.data.forEach((element, index) => {
+                        const value = dataset.data[index];
+                        if (value == null) return;
+                        const pos = element.tooltipPosition();
+                        ctx.save();
+                        ctx.fillStyle = '#333';
+                        ctx.font = '12px Segoe UI';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(String(Math.round(value * 100) / 100), pos.x, pos.y - 4);
+                        ctx.restore();
+                    });
+                });
+            }
+        };
+        if (window.Chart && Chart.register) Chart.register(valueLabelPlugin);
+
+        // Limites por consultor
+        const limitesConsultores = {
+            'Ana Leya Lima Alves Frota': 2 * 24 * 60 * 60 * 1000, // 2 dias em milissegundos
+            'Daniel Leite Pereira': 2 * 60 * 60 * 1000, // 2 horas em milissegundos
+            'Giovana Bruno da Silva': 14 * 24 * 60 * 60 * 1000 // 14 dias em milissegundos
+        };
+
+        // Funções de navegação
+        function openTab(tabName) {
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[onclick="openTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+
+        function openAdminTab(name) {
+            const admin = document.getElementById('admin');
+            if (!admin) return;
+            admin.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            admin.querySelectorAll('.admin-content').forEach(c => c.classList.remove('active'));
+            const btn = admin.querySelector(`[onclick="openAdminTab('${name}')"]`);
+            if (btn) btn.classList.add('active');
+            const content = document.getElementById(name);
+            if (content) content.classList.add('active');
+            if (name === 'adminAlertas') initAdminAlertTab();
+            if (name === 'adminUsuarios') initAdminUsuariosTab();
+        }
+
+        async function initAdminAlertTab() {
+            try {
+                await preencherUsuariosSelect('alertUsuarioSelect');
+                await preencherUsuariosSelect('alertUsuariosMulti');
+                const storedKey = getEmailJsKey();
+                const keyInput = document.getElementById('emailjsKey');
+                if (keyInput) keyInput.value = storedKey;
+                await carregarAlertasAtivos();
+                await carregarHistoricoNotificacoes();
+                try { const cfg = JSON.parse(localStorage.getItem('alertas_schedule_cfg')||'{}');
+                    const u = document.getElementById('alertUsuariosMulti');
+                    const inc = document.getElementById('alertIncludeGestora');
+                    const tm = document.getElementById('alertScheduleTime');
+                    if (u && Array.isArray(cfg.usuarios)) { Array.from(u.options).forEach(o=>{ o.selected = cfg.usuarios.includes(o.value); }); }
+                    if (inc && typeof cfg.includeGestora==='boolean') inc.value = String(cfg.includeGestora);
+                    if (tm && cfg.time) tm.value = cfg.time;
+                    iniciarAgendamento();
+                    renderAgendamentoHistorico();
+                } catch(_){ }
+                try {
+                    const done = localStorage.getItem('cleanup_flavia_v1');
+                    if (!done) {
+                        await excluirHistoricoPorDestinatario('flavia.costa@normaq.com.br');
+                        localStorage.setItem('cleanup_flavia_v1','1');
+                        await carregarHistoricoNotificacoes();
+                    }
+                    const done2 = localStorage.getItem('cleanup_teste_alerta_v1');
+                    if (!done2) {
+                        await excluirHistoricoPorTituloDestinatario('Teste de Alerta','ana.leya@normaq.com.br');
+                        localStorage.setItem('cleanup_teste_alerta_v1','1');
+                        await carregarHistoricoNotificacoes();
+                    }
+                } catch(_){ }
+            } catch(_){ }
+        }
+
+        function getSelectedUsuariosMulti() {
+            const sel = document.getElementById('alertUsuariosMulti');
+            if (!sel) return [];
+            return Array.from(sel.selectedOptions).map(o=>o.value);
+        }
+
+        async function enviarAlertasSelecionados() {
+            try {
+                const usuarios = getSelectedUsuariosMulti();
+                const incStr = document.getElementById('alertIncludeGestora')?.value || 'false';
+                const incluirGestora = incStr === 'true';
+                const emailOverride = (document.getElementById('alertCustomEmail')?.value || '').trim();
+                const modo = (document.getElementById('alertModoEnvio')?.value || 'novos');
+                const opts = { onlyUsuarios: usuarios, incluirGestora, diasStatusOpen: 10, emailOverride, modoCompleto: modo === 'completo' };
+                let enviado = false;
+                if (typeof executarEnvioPlano === 'function') {
+                    enviado = await executarEnvioPlano(opts);
+                } else {
+                    await checarEEnviarAlertas(opts);
+                    enviado = true;
+                }
+                await carregarHistoricoNotificacoes();
+                if (!enviado) alert('Nenhum item novo para envio.');
+            } catch(e) {
+                alert('Falha ao enviar agora: ' + (e.message||e));
+            }
+        }
+
+        function salvarAgendamentoAlertas() {
+            const usuarios = getSelectedUsuariosMulti();
+            const incStr = document.getElementById('alertIncludeGestora')?.value || 'false';
+            const incluirGestora = incStr === 'true';
+            const time = document.getElementById('alertScheduleTime')?.value || '08:00';
+            const emailOverride = (document.getElementById('alertCustomEmail')?.value || '').trim();
+            const modo = (document.getElementById('alertModoEnvio')?.value || 'novos');
+            const cfg = { usuarios, includeGestora: incluirGestora, time, emailOverride, modo };
+            localStorage.setItem('alertas_schedule_cfg', JSON.stringify(cfg));
+            try {
+                const histStr = localStorage.getItem('alertas_schedule_history') || '[]';
+                const hist = JSON.parse(histStr);
+                hist.unshift({ tipo: 'salvo', cfg, data: new Date().toLocaleString('pt-BR') });
+                localStorage.setItem('alertas_schedule_history', JSON.stringify(hist));
+            } catch(_){ }
+            iniciarAgendamento();
+            renderAgendamentoHistorico();
+            alert('Agendamento salvo.');
+        }
+
+        let _alertasScheduleTimer = null;
+        function iniciarAgendamento() {
+            try { if (_alertasScheduleTimer) { clearInterval(_alertasScheduleTimer); _alertasScheduleTimer=null; } } catch(_){ }
+            const cfgStr = localStorage.getItem('alertas_schedule_cfg');
+            if (!cfgStr) return;
+            const cfg = JSON.parse(cfgStr||'{}');
+            if (!cfg || !cfg.time) return;
+            _alertasScheduleTimer = setInterval(async ()=>{
+                const now = new Date();
+                const [hh,mm] = String(cfg.time).split(':');
+                const due = now.getHours()===parseInt(hh||'0',10) && now.getMinutes()===parseInt(mm||'0',10);
+                const last = localStorage.getItem('alertas_schedule_last') || '';
+                const today = now.toISOString().slice(0,10);
+                if (due && last !== today) {
+                    try {
+                        const opts = { onlyUsuarios: cfg.usuarios||[], incluirGestora: !!cfg.includeGestora, diasStatusOpen: 10, emailOverride: (cfg.emailOverride||'').trim(), modoCompleto: (cfg.modo||'novos')==='completo' };
+                        if (typeof executarEnvioPlano === 'function') {
+                            await executarEnvioPlano(opts);
+                        } else {
+                            await checarEEnviarAlertas(opts);
+                        }
+                        localStorage.setItem('alertas_schedule_last', today);
+                        try {
+                            const histStr = localStorage.getItem('alertas_schedule_history') || '[]';
+                            const hist = JSON.parse(histStr);
+                            hist.unshift({ tipo: 'executado', cfg, data: new Date().toLocaleString('pt-BR') });
+                            localStorage.setItem('alertas_schedule_history', JSON.stringify(hist));
+                        } catch(_){ }
+                        await carregarHistoricoNotificacoes();
+                        renderAgendamentoHistorico();
+                    } catch(_){ }
+                }
+            }, 60000);
+        }
+
+        function renderAgendamentoHistorico() {
+            const el = document.getElementById('agendamentoHistoricoLista');
+            if (!el) return;
+            let items = [];
+            try { items = JSON.parse(localStorage.getItem('alertas_schedule_history')||'[]'); } catch(_){ items = []; }
+            if (!items.length) { el.innerHTML = '<div style="padding:8px;color:#000;">Nenhum agendamento salvo.</div>'; return; }
+            const toRow = (it, idx)=>{
+                const u = (it.cfg?.usuarios||[]).join(', ') || '-';
+                const g = it.cfg?.includeGestora ? 'Sim' : 'Não';
+                const em = (it.cfg?.emailOverride||'').trim() || '(configuração padrão)';
+                const ti = it.cfg?.time || '-';
+                const md = (it.cfg?.modo||'novos')==='completo' ? 'Resumo completo' : 'Somente novos';
+                const dt = it.data || '';
+                return `<div style="padding:10px;border-bottom:1px solid #eee;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <div style="color:#666;">${it.tipo==='executado'?'Executado':'Salvo'}</div>
+                        <div style="color:#555;">${dt}</div>
+                    </div>
+                    <div style="color:#000;">Usuários: ${u}</div>
+                    <div style="color:#000;">Gestora: ${g}</div>
+                    <div style="color:#000;">E-mail: ${em}</div>
+                    <div style="color:#000;">Hora: ${ti}</div>
+                    <div style="color:#000;">Modo: ${md}</div>
+                    <div style="margin-top:6px;display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="btn btn-sm" onclick="editarAgendamentoHistorico(${idx})">Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="removerAgendamentoHistorico(${idx})">Excluir</button>
+                    </div>
+                </div>`;
+            };
+            el.innerHTML = items.map((it, idx)=>toRow(it, idx)).join('');
+        }
+
+        function editarAgendamentoHistorico(idx) {
+            try {
+                const hist = JSON.parse(localStorage.getItem('alertas_schedule_history')||'[]');
+                const it = hist[idx];
+                if (!it || !it.cfg) return;
+                const cfg = it.cfg;
+                const u = document.getElementById('alertUsuariosMulti');
+                const inc = document.getElementById('alertIncludeGestora');
+                const tm = document.getElementById('alertScheduleTime');
+                const em = document.getElementById('alertCustomEmail');
+                if (u && Array.isArray(cfg.usuarios)) { Array.from(u.options).forEach(o=>{ o.selected = cfg.usuarios.includes(o.value); }); }
+                if (inc && typeof cfg.includeGestora==='boolean') inc.value = String(cfg.includeGestora);
+                if (tm && cfg.time) tm.value = cfg.time;
+                if (em) em.value = (cfg.emailOverride||'');
+                try { localStorage.setItem('alertas_schedule_cfg', JSON.stringify(cfg)); } catch(_){ }
+            } catch(_){ }
+        }
+
+        function removerAgendamentoHistorico(idx) {
+            try {
+                const hist = JSON.parse(localStorage.getItem('alertas_schedule_history')||'[]');
+                hist.splice(idx,1);
+                localStorage.setItem('alertas_schedule_history', JSON.stringify(hist));
+                renderAgendamentoHistorico();
+            } catch(_){ }
+        }
+
+        async function preencherUsuariosSelect(selectId) {
+            const sel = document.getElementById(selectId);
+            if (!sel) return;
+            sel.innerHTML = '';
+            const allowed = [
+                'Ana Leya Lima Alves Frota',
+                'Daniel Leite Pereira',
+                'Giovana Bruno da Silva',
+                'Graziela Silva dos Santos Galdino',
+                'ana.leya',
+                'giovana.silva',
+                'graziela.galdino',
+                'daniel.leite'
+            ];
+            allowed.forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
+        }
+
+        async function salvarAlertaAdmin() {
+            try {
+                const usuario = document.getElementById('alertUsuarioSelect').value;
+                const email = document.getElementById('alertEmail').value.trim();
+                const dias = parseInt(document.getElementById('alertDias').value||'3',10);
+                const payload = { usuario, email, dias, ativo: true };
+                let ok = false;
+                try { const { error } = await supabase.from(ALERTAS_CONFIG).upsert(payload, { onConflict: 'usuario' }); if (error) throw error; ok=true; } catch(_){ }
+                if (!ok) { const { error } = await supabase.from(ALT_ALERTAS_CONFIG).upsert(payload, { onConflict: 'usuario' }); if (error) throw error; }
+                await carregarAlertasAtivos();
+                alert('Alerta configurado.');
+            } catch(e) { alert('Falha ao configurar: '+(e.message||e)); }
+        }
+
+        async function carregarAlertasAtivos() {
+            try {
+                let dataArr = [];
+                try { const { data } = await supabase.from(ALERTAS_CONFIG).select('*').order('usuario'); dataArr = Array.isArray(data)?data:[]; } catch(_){ }
+                if (!dataArr.length) { try { const { data } = await supabase.from(ALT_ALERTAS_CONFIG).select('*').order('usuario'); dataArr = Array.isArray(data)?data:[]; } catch(_){ } }
+                const cont = document.getElementById('alertasAtivosLista');
+                const html = (dataArr).map(r=>`
+                    <div class="alert-item" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                        <div class="alert-info" style="margin-bottom:8px;">
+                            <div style="font-weight:600;color:#333;">${r.usuario}</div>
+                            <div style="font-size:12px;color:#666;">E-mail: ${r.email} | Dias para alerta: ${r.dias}</div>
+                        </div>
+                        <div class="alert-actions" style="display:flex;gap:8px;align-items:center;">
+                            <span class="alert-status ${r.ativo ? 'alert-active' : 'alert-inactive'}" style="padding:4px 8px;border-radius:12px;background:${r.ativo?'#e6ffed':'#ffecec'};color:${r.ativo?'#0a0':'#a00'};font-size:12px;">${r.ativo ? 'Ativo' : 'Inativo'}</span>
+                            <button class="btn btn-warning btn-sm" onclick="editarAlerta('${encodeURIComponent(r.usuario)}','${encodeURIComponent(r.email)}',${r.dias})">Editar</button>
+                            <button class="btn btn-danger btn-sm" onclick="removerAlerta('${encodeURIComponent(r.usuario)}')">Remover</button>
+                            <button class="btn btn-sm" onclick="toggleAlertaAtivo('${encodeURIComponent(r.usuario)}', ${r.ativo ? 'false' : 'true'})">${r.ativo?'Desativar':'Ativar'}</button>
+                        </div>
+                    </div>
+                `).join('');
+                if (cont) cont.innerHTML = html;
+            } catch(_){ }
+        }
+
+        async function carregarHistoricoNotificacoes() {
+            try {
+                let dataArr = [];
+                try { const { data } = await supabase.from(HISTORICO_NOTIF).select('*').limit(50); dataArr = Array.isArray(data)?data:[]; } catch(_){ }
+                if (!dataArr.length) { try { dataArr = JSON.parse(localStorage.getItem('historicoNotificacoes')) || []; } catch(_){ dataArr = []; } }
+                const cont = document.getElementById('historicoNotificacoesLista');
+                const iconFor = (tipo)=>{
+                    switch(String(tipo||'').toLowerCase()){
+                        case 'teste_alerta': return '🧪';
+                        case 'novos_eventos': return '📥';
+                        case 'alerta_fora_prazo': return '🔔';
+                        case 'alerta_parado': return '⏸️';
+                        case 'alerta_proximo_prazo': return '⏳';
+                        case 'gestor_15_dias_parado': return '📊';
+                        default: return '✉️';
+                    }
+                };
+                const html = (dataArr).map(r=>{
+                    const enviadoTxt = r.enviado ? 'Enviado' : 'Falha no envio';
+                    const rawDate = r.data || r.created_at || r.inserted_at || Date.now();
+                    const dataTxt = new Date(rawDate).toLocaleString('pt-BR');
+                    const icon = iconFor(r.tipo);
+                    const corpo = String(r.mensagem||'').replace(/\n+/g,' ').replace(/\s{2,}/g,' ').trim();
+                    return `
+                        <div style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+                            <div style="font-weight:600;color:#333;margin-bottom:4px;"><span style="margin-right:6px">${icon}</span>${r.titulo||''}</div>
+                            <div style="font-size:12px;color:#666;margin-bottom:8px;">Para: ${r.destinatario||''} | ${dataTxt} | ${enviadoTxt}</div>
+                            <div>${corpo}</div>
+                        </div>
+                    `;
+                }).join('');
+                if (cont) cont.innerHTML = html;
+            } catch(_){ }
+        }
+
+        async function toggleAlertaAtivo(usuarioEnc, ativo) {
+            try {
+                const usuario = decodeURIComponent(usuarioEnc);
+                let ok = false;
+                try { const { error } = await supabase.from(ALERTAS_CONFIG).update({ ativo }).eq('usuario', usuario); if (error) throw error; ok=true; } catch(_){ }
+                if (!ok) { const { error } = await supabase.from(ALT_ALERTAS_CONFIG).update({ ativo }).eq('usuario', usuario); if (error) throw error; }
+                await carregarAlertasAtivos();
+            } catch(e) { alert('Falha ao atualizar: '+(e.message||e)); }
+        }
+
+        function editarAlerta(usuarioEnc, emailEnc, dias) {
+            const usuario = decodeURIComponent(usuarioEnc);
+            const email = decodeURIComponent(emailEnc);
+            const su = document.getElementById('alertUsuarioSelect'); if (su) su.value = usuario;
+            const em = document.getElementById('alertEmail'); if (em) em.value = email;
+            const di = document.getElementById('alertDias'); if (di) di.value = String(dias||'');
+        }
+
+        async function removerAlerta(usuarioEnc) {
+            if (!confirm('Remover alerta?')) return;
+            try {
+                const usuario = decodeURIComponent(usuarioEnc);
+                let ok = false;
+                try { const { error } = await supabase.from(ALERTAS_CONFIG).delete().eq('usuario', usuario); if (error) throw error; ok=true; } catch(_){ }
+                if (!ok) { const { error } = await supabase.from(ALT_ALERTAS_CONFIG).delete().eq('usuario', usuario); if (error) throw error; }
+                await carregarAlertasAtivos();
+            } catch(e) { alert('Falha ao remover: '+(e.message||e)); }
+        }
+
+        function buildEmailTesteMessage(nome) {
+            return `
+                <p>Prezado(a) ${nome},</p>
+                <p>Este é um e-mail de teste do <strong>Sistema de Controle de Eventos</strong>.<br/>
+                Se você recebeu este e-mail, a configuração do EmailJS está OK.</p>
+                <p>Atenciosamente,<br/>
+                <strong>Sistema de Controle de Eventos</strong></p>
+            `;
+        }
+
+        function buildEmailEventosMessage(prefixo, usuario, itens, footerHtml) {
+            const lista = (itens||[]).map(l => {
+                const ev = l.Evento || '';
+                const cli = l.Cliente || '';
+                const sit = l.__situacao || (l.Status || '');
+                const dias = l.__diasAberto != null ? `${l.__diasAberto} dia(s)` : '';
+                const di = l['Data Inclusão'] ? new Date(l['Data Inclusão']) : null;
+                const diasRecebidos = di ? Math.max(0, Math.floor((Date.now() - di.getTime()) / (24*60*60*1000))) : null;
+                const linhaDiasRecebidos = diasRecebidos != null ? `<br/>Dias desde inclusão: ${diasRecebidos} dia(s)` : '';
+                const tipo = l.Tipo || l['Tipo'] || l['Tipo Evento'] || '';
+                const linhaTipo = tipo ? `<br/>Tipo: ${tipo}` : '';
+                const responsavel = l['Usuario Comentário'] || '';
+                const linhaResp = responsavel ? `<br/>Responsável: ${responsavel}` : '';
+                return `<li><strong>Evento ${ev}</strong> – ${cli}${linhaTipo}<br/>Dias em aberto: ${dias}<br/>Situação: ${sit}${linhaResp}${linhaDiasRecebidos}</li>`;
+            }).join('');
+            const footer = footerHtml ? `<p>${footerHtml}</p>` : '';
+            return `
+                <p>Prezado(a) ${usuario},</p>
+                <p>${prefixo}</p>
+                <ul>${lista}</ul>
+                ${footer}
+                <p>Atenciosamente,<br/>
+                <strong>Sistema de Controle de Eventos</strong></p>
+            `;
+        }
+
+        function buildEmailResumoAlertas(usuario, novos, parado, pertoVencer, dias, statusDias, foraPrazo) {
+            const mkLista = (itens)=>{
+                const vistos = new Set();
+                return (itens||[]).filter(l=>{
+                    const ev = String(l.Evento||'');
+                    if (!ev) return true;
+                    if (vistos.has(ev)) return false;
+                    vistos.add(ev);
+                    return true;
+                }).map(l=>{
+                    const ev = l.Evento || '';
+                    const cli = l.Cliente || '';
+                    const sit = l.__situacao || (l.Status || '');
+                    const diasA = l.__diasAberto != null ? `${l.__diasAberto} dia(s)` : '';
+                    const di = l['Data Inclusão'] ? new Date(l['Data Inclusão']) : null;
+                    const diasReceb = di ? Math.max(0, Math.floor((Date.now() - di.getTime()) / (24*60*60*1000))) : null;
+                    const linhaDiasRec = diasReceb != null ? `<br/>Dias desde inclusão: ${diasReceb} dia(s)` : '';
+                    const tipo = l.Tipo || l['Tipo'] || l['Tipo Evento'] || '';
+                    const linhaTipo = tipo ? `<br/>Tipo: ${tipo}` : '';
+                    const responsavel = l['Usuario Comentário'] || '';
+                    const linhaResp = responsavel ? `<br/>Responsável: ${responsavel}` : '';
+                    return `<li><strong>Evento ${ev}</strong> – ${cli}${linhaTipo}<br/>Dias em aberto: ${diasA}<br/>Situação: ${sit}${linhaResp}${linhaDiasRec}</li>`;
+                }).join('');
+            };
+            const sNovos = (novos&&novos.length) ? `
+                <p>Você recebeu ${novos.length} nova(s) Evento(s) escalonada(s):</p>
+                <ul>${mkLista(novos)}</ul>
+            ` : '';
+            const sParado = (parado&&parado.length) ? `
+                <p>Você tem ${parado.length} evento(s) parados:</p>
+                <ul>${mkLista(parado)}</ul>
+            ` : '';
+            const sPerto = (pertoVencer&&pertoVencer.length) ? `
+                <p>Você tem ${pertoVencer.length} evento(s) próximos de vencer o prazo (${dias} dia(s)):</p>
+                <ul>${mkLista(pertoVencer)}</ul>
+            ` : '';
+            const aguardandoArr = (statusDias||[]).filter(l=> normalizarStatus(l.Status)==='Aguardando');
+            const andamentoArr = (statusDias||[]).filter(l=> normalizarStatus(l.Status)==='Andamento');
+            const sAguard = (aguardandoArr&&aguardandoArr.length) ? `
+                <p>Você tem ${aguardandoArr.length} evento(s) em Aguardando há mais de 10 dias:</p>
+                <ul>${mkLista(aguardandoArr)}</ul>
+            ` : '';
+            const sAndam = (andamentoArr&&andamentoArr.length) ? `
+                <p>Você tem ${andamentoArr.length} evento(s) em Andamento há mais de 10 dias:</p>
+                <ul>${mkLista(andamentoArr)}</ul>
+            ` : '';
+            const sFora = (foraPrazo&&foraPrazo.length) ? `
+                <p>Você tem ${foraPrazo.length} evento(s) fora do prazo:</p>
+                <ul>${mkLista(foraPrazo)}</ul>
+            ` : '';
+            return `
+                <p>Prezado(a) ${usuario},</p>
+                ${sNovos}
+                ${sParado}
+                ${sPerto}
+                ${sAguard}
+                ${sAndam}
+                ${sFora}
+                <p>Atenciosamente,<br/>
+                <strong>Sistema de Controle de Eventos</strong></p>
+            `;
+        }
+
+        async function enviarEmailTesteAdmin() {
+            try {
+                const key = getEmailJsKey();
+                if (!key) { alert('Informe a EmailJS Public Key.'); return; }
+                if (window.emailjs && emailjs.init) emailjs.init(key);
+                const to = document.getElementById('alertEmail').value.trim();
+                const usuarioSel = document.getElementById('alertUsuarioSelect').value;
+                const display = getDisplayFirstName(usuarioSel);
+                const mensagem = buildEmailTesteMessage(display);
+                const params = { to_email: to, to_name: display, message_html: mensagem };
+                const res = await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, params);
+                await registrarHistorico('teste_alerta','Teste de envio de Alerta', mensagem, to, display, 0, true, '');
+                alert('E-mail de teste enviado.');
+                await carregarHistoricoNotificacoes();
+            } catch(e) {
+                const usuarioSel = document.getElementById('alertUsuarioSelect').value;
+                const display = getDisplayFirstName(usuarioSel);
+                const msgFalha = `<p>Falha no teste de envio.</p><p>Erro: ${(e.message||String(e))}</p>`;
+                await registrarHistorico('teste_alerta','Falha no teste de Alerta', msgFalha, document.getElementById('alertEmail').value.trim(), display, 0, false, e.message||String(e));
+                alert('Falha ao enviar: '+(e.message||e));
+                await carregarHistoricoNotificacoes();
+            }
+        }
+
+        function getEmailJsKey() {
+            return EMAILJS_PUBLIC_KEY || '';
+        }
+
+        async function registrarHistorico(tipo, titulo, mensagem, destinatario, usuario, quantidadeOS, enviado, erro) {
+            const payloadDb = {
+                tipo,
+                titulo,
+                mensagem,
+                destinatario,
+                usuario,
+                enviado: !!enviado,
+                erro: erro || null,
+                quantidadeos: quantidadeOS || 0,
+                data: new Date().toISOString()
+            };
+            const payloadLocal = { tipo, titulo, mensagem, destinatario, usuario, quantidadeOS: quantidadeOS||0, enviado: !!enviado, erro: erro||null, data: new Date().toISOString() };
+            try {
+                const { error } = await supabase.from(HISTORICO_NOTIF).insert(payloadDb);
+                if (error) throw error;
+            } catch(e){
+                try { console.error('Falha ao salvar em historico_notificacao:', e); } catch(_){ }
+                try {
+                    const hist = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                    hist.unshift({ ...payloadLocal, data: new Date().toLocaleString('pt-BR') });
+                    localStorage.setItem('historicoNotificacoes', JSON.stringify(hist));
+                } catch(_){ }
+            }
+        }
+
+        async function mostrarModalAtrasosUsuario(user) {
+            try {
+                const { data: mapa } = await supabase.from(TABELA_USUARIOS).select('usuario,email').eq('email', user.email).limit(1);
+                const usuarioNome = Array.isArray(mapa) && mapa[0] ? mapa[0].usuario : (user.email||'').split('@')[0];
+                const linhas = enriquecerConsulta(dadosCompletos||[]).filter(l=>l['Usuario Comentário']===usuarioNome);
+                const atrasos = linhas.filter(l=>['Aguardando','Andamento'].includes(normalizarStatus(l.Status)) && l.__statusPrazo==='Fora do Prazo');
+                const nums = atrasos.map(l=>String(l.Evento||'')).filter(Boolean);
+                if (!nums.length) return;
+                const overlay = document.getElementById('modalOverlay');
+                const content = document.getElementById('modalContent');
+                content.innerHTML = `
+                    <div class="modal-header"><span>Alerta de Atrasos</span><button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button></div>
+                    <div style="padding:10px;">
+                        <div style="font-weight:600;color:#000;">Você tem ${nums.length} evento(s) fora do prazo.</div>
+                        <div style="margin-top:6px;color:#000;">Eventos: ${nums.join(', ')}</div>
+                    </div>
+                `;
+                overlay.style.display='flex';
+            } catch(_){ }
+        }
+
+        async function excluirHistoricoPorDestinatario(email) {
+            try {
+                const { error } = await supabase.from(HISTORICO_NOTIF).delete().eq('destinatario', email);
+                if (error) throw error;
+                try {
+                    const hist = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                    const filtered = hist.filter(h => String(h.destinatario||'').toLowerCase() !== String(email||'').toLowerCase());
+                    localStorage.setItem('historicoNotificacoes', JSON.stringify(filtered));
+                } catch(_){ }
+            } catch(_){ }
+        }
+
+        async function excluirHistoricoPorTituloDestinatario(titulo, email) {
+            try {
+                const { error } = await supabase.from(HISTORICO_NOTIF).delete().eq('titulo', titulo).eq('destinatario', email);
+                if (error) throw error;
+                try {
+                    const hist = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                    const filtered = hist.filter(h => !(String(h.titulo||'')===String(titulo) && String(h.destinatario||'').toLowerCase()===String(email).toLowerCase()));
+                    localStorage.setItem('historicoNotificacoes', JSON.stringify(filtered));
+                } catch(_){ }
+            } catch(_){ }
+        }
+
+        function _getSentCache() {
+            try { return JSON.parse(localStorage.getItem('alert_sent_cache')||'{}'); } catch(_){ return {}; }
+        }
+        function _saveSentCache(cache) {
+            try { localStorage.setItem('alert_sent_cache', JSON.stringify(cache||{})); } catch(_){ }
+        }
+        function atualizarCacheEnvio(destinatario, categoria, itens) {
+            const cache = _getSentCache();
+            const key = String(destinatario||'').toLowerCase();
+            const cat = String(categoria||'');
+            const prev = new Set(((cache[key] && cache[key][cat]) || []));
+            (itens||[]).forEach(it=>{ const ev = String(it.Evento||''); if (ev) prev.add(ev); });
+            cache[key] = cache[key] || {};
+            cache[key][cat] = Array.from(prev);
+            _saveSentCache(cache);
+        }
+        function filtrarNovosItensParaEnvio(destinatario, categoria, itens, dryRun) {
+            const cache = _getSentCache();
+            const key = String(destinatario||'').toLowerCase();
+            const cat = String(categoria||'');
+            const set = new Set(((cache[key] && cache[key][cat]) || []));
+            const novos = [];
+            (itens||[]).forEach(it => {
+                const ev = String(it.Evento||'');
+                if (!ev) return;
+                if (!set.has(ev)) novos.push(it);
+            });
+            if (!dryRun) {
+                const todos = new Set([...(set||[]), ...novos.map(x=>String(x.Evento||''))]);
+                cache[key] = cache[key] || {};
+                cache[key][cat] = Array.from(todos);
+                _saveSentCache(cache);
+            }
+            return novos;
+        }
+
+        function _parseDateBR(s) {
+            if (!s) return null;
+            const m = String(s).match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+            if (!m) { try { return new Date(s); } catch(_){ return null; } }
+            const d = parseInt(m[1],10), mo = parseInt(m[2],10), y = parseInt(m[3],10);
+            const hh = parseInt(m[4]||'0',10), mm = parseInt(m[5]||'0',10), ss = parseInt(m[6]||'0',10);
+            return new Date(y, mo-1, d, hh, mm, ss);
+        }
+
+        function obterUltimasPorEvento(linhas) {
+            const byEv = {};
+            (linhas||[]).forEach(l=>{
+                const ev = l.Evento; if (!ev) return;
+                const da = _parseDateBR(l['Data Ação']) || _parseDateBR(l['Data Comentário']) || _parseDateBR(l['Data Inclusão']);
+                const ts = da ? da.getTime() : 0;
+                const prev = byEv[ev];
+                if (!prev || ts >= (prev.__ts||0)) { l.__ts = ts; byEv[ev] = l; }
+            });
+            return Object.values(byEv);
+        }
+
+        function coletarLinhasUsuario(usuarioSel, linhas) {
+            const usuarioLong = USUARIOS_MAP[usuarioSel] || usuarioSel;
+            const short = String(usuarioSel||'').toLowerCase();
+            const long = String(usuarioLong||'').toLowerCase();
+            const parts = short.split('.').filter(Boolean);
+            const match = (nome)=>{
+                const n = String(nome||'').toLowerCase();
+                if (!n) return false;
+                if (n === long) return true;
+                if (parts.length && parts.every(p=>n.includes(p))) return true;
+                const first = parts[0] || short.split(' ')[0] || short;
+                if (first && n.includes(first)) return true;
+                return false;
+            };
+            const ultimas = obterUltimasPorEvento(linhas||[]);
+            return ultimas.filter(l=>match(l['Usuario Comentário']));
+        }
+
+        async function montarPlanoEnvio(opts) {
+            const { data: configs } = await supabase.from(ALERTAS_CONFIG).select('*').eq('ativo', true);
+            const linhas = enriquecerConsulta(dadosCompletos||[]);
+            const onlyUsuarios = Array.isArray(opts?.onlyUsuarios) ? opts.onlyUsuarios : [];
+            const incluirGestora = !!opts?.incluirGestora;
+            const diasStatusOpen = parseInt(opts?.diasStatusOpen||'10',10);
+            const emailOverride = (opts?.emailOverride||'').trim();
+            const defaults = ['Ana Leya Lima Alves Frota','ana.leya','Giovana Bruno da Silva','giovana.silva','Daniel Leite Pereira','daniel.leite'];
+            const selecionados = onlyUsuarios.length ? onlyUsuarios : defaults;
+            const cfgsFiltrados = selecionados.map(u=>{
+                const long = USUARIOS_MAP[u] || u;
+                const found = (configs||[]).find(c=> c.usuario === u) || (configs||[]).find(c=> c.usuario === long);
+                return found || { usuario: u, email: emailOverride || '', dias: 3, ativo: true };
+            });
+            let ccGestora = '';
+            if (incluirGestora) {
+                const { data: cfgGestoraArrLong } = await supabase.from(ALERTAS_CONFIG).select('*').eq('usuario','Graziela Silva dos Santos Galdino').limit(1);
+                let cfgGestoraArr = cfgGestoraArrLong;
+                if (!cfgGestoraArr || !cfgGestoraArr.length) {
+                    const { data: cfgGestoraArr2 } = await supabase.from(ALERTAS_CONFIG).select('*').eq('usuario','graziela.galdino').limit(1);
+                    cfgGestoraArr = cfgGestoraArr2;
+                }
+                const cfgGestora = Array.isArray(cfgGestoraArr) && cfgGestoraArr[0] ? cfgGestoraArr[0] : null;
+                if (cfgGestora) ccGestora = cfgGestora.email || '';
+            }
+            const planos = [];
+            for (const cfg of cfgsFiltrados) {
+                const usuarioSel = cfg.usuario;
+                const display = getDisplayFirstName(usuarioSel);
+                const lista = coletarLinhasUsuario(usuarioSel, linhas);
+                const limite = getLimiteMs(USUARIOS_MAP[usuarioSel] || usuarioSel);
+                const pertoVencer = lista.filter(l=>{ if (!limite) return false; const ms=l.__tempoMs; const rest=limite-ms; return rest>0 && rest < (cfg.dias*24*60*60*1000); });
+                const novos = lista.filter(l=>{ const di = l['Data Inclusão'] ? new Date(l['Data Inclusão']) : null; if (!di) return false; const diff = Date.now() - di.getTime(); return diff < (cfg.dias*24*60*60*1000); });
+                const parado = lista.filter(l=>l.__situacao==='Parado');
+                const statusXdias = lista.filter(l=>['Aguardando','Andamento'].includes(normalizarStatus(l.Status)) && (l.__diasAberto||0) > diasStatusOpen);
+                const foraPrazo = lista.filter(l=>['Aguardando','Andamento'].includes(normalizarStatus(l.Status)) && l.__statusPrazo==='Fora do Prazo');
+                const dedup = (arr)=>{ const s=new Set(); return (arr||[]).filter(x=>{ const ev=String(x.Evento||''); if(!ev) return true; if(s.has(ev)) return false; s.add(ev); return true; }); };
+                const novosD = dedup(novos);
+                const paradoD = dedup(parado);
+                const pertoD = dedup(pertoVencer);
+                const statusXD = dedup(statusXdias);
+                const aguardandoD = statusXD.filter(l=> normalizarStatus(l.Status)==='Aguardando');
+                const andamentoD = statusXD.filter(l=> normalizarStatus(l.Status)==='Andamento');
+                const foraD = dedup(foraPrazo);
+            const modoCompleto = !!opts?.modoCompleto;
+            const aguardAll = dedup(lista.filter(l=> normalizarStatus(l.Status)==='Aguardando'));
+            const andamAll = dedup(lista.filter(l=> normalizarStatus(l.Status)==='Andamento'));
+            const novosFilt = modoCompleto ? [] : filtrarNovosItensParaEnvio(cfg.email, 'user_novos', novosD, true);
+            const paradoFilt = modoCompleto ? paradoD : filtrarNovosItensParaEnvio(cfg.email, 'user_parado', paradoD, true);
+            const pertoFilt = modoCompleto ? [] : filtrarNovosItensParaEnvio(cfg.email, 'user_perto', pertoD, true);
+            const aguardFilt = modoCompleto ? aguardAll : filtrarNovosItensParaEnvio(cfg.email, 'user_aguardando10', aguardandoD, true);
+            const andamFilt = modoCompleto ? andamAll : filtrarNovosItensParaEnvio(cfg.email, 'user_andamento10', andamentoD, true);
+            const foraFilt = modoCompleto ? foraD : filtrarNovosItensParaEnvio(cfg.email, 'user_fora', foraD, true);
+                planos.push({
+                    destinatario: emailOverride || cfg.email,
+                    usuario: usuarioSel,
+                    display,
+                    cc: ccGestora || '',
+                    categorias: {
+                        novos: novosFilt,
+                        parado: paradoFilt,
+                        perto: pertoFilt,
+                        status10: [...aguardFilt, ...andamFilt],
+                        statusAguardando10: aguardFilt,
+                        statusAndamento10: andamFilt,
+                        foraPrazo: foraFilt
+                    }
+                });
+            }
+            return planos;
+        }
+
+        async function previewAlertasSelecionados() {
+            const usuarios = getSelectedUsuariosMulti();
+            const incStr = document.getElementById('alertIncludeGestora')?.value || 'false';
+            const incluirGestora = incStr === 'true';
+            const emailOverride = (document.getElementById('alertCustomEmail')?.value || '').trim();
+            const modo = (document.getElementById('alertModoEnvio')?.value || 'novos');
+            const plano = await montarPlanoEnvio({ onlyUsuarios: usuarios, incluirGestora, diasStatusOpen: 10, emailOverride, modoCompleto: modo==='completo' });
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            const mkCat = (label, arr)=>{
+                if (!arr || !arr.length) return '';
+                const nums = Array.from(new Set(arr.map(x=>String(x.Evento||'')).filter(Boolean)));
+                return `<div style="margin-top:8px;color:#000;"><strong>${label}:</strong> ${arr.length} ${arr.length===1?'item':'itens'}${nums.length?` • Eventos: ${nums.join(', ')}`:''}</div>`;
+            };
+            const modoCompleto = (document.getElementById('alertModoEnvio')?.value || 'novos')==='completo';
+            const html = plano.map(p=>{
+                return `
+                    <div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:10px;background:#fff;">
+                        <div style="font-weight:600;color:#333;">${p.display} • ${p.destinatario}${p.cc?` • CC: ${p.cc}`:''}</div>
+                        ${mkCat('Novos', p.categorias.novos)}
+                        ${mkCat('Parado', p.categorias.parado)}
+                        ${mkCat('Próximo do prazo', p.categorias.perto)}
+                        ${mkCat(modoCompleto?'Aguardando (todos abertos)':'Aguardando > 10 dias', p.categorias.statusAguardando10)}
+                        ${mkCat(modoCompleto?'Andamento (todos abertos)':'Andamento > 10 dias', p.categorias.statusAndamento10)}
+                        ${mkCat('Fora do Prazo', p.categorias.foraPrazo)}
+                    </div>
+                `;
+            }).join('');
+            content.innerHTML = `
+                <div class="modal-header"><span>Pré-visualização de Envio</span><button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button></div>
+                <div style="padding:10px;">${html || '<div>Sem itens para envio.</div>'}</div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        async function executarEnvioPlano(opts) {
+            const key = getEmailJsKey();
+            if (!key || !window.emailjs || !emailjs.init) throw new Error('EmailJS não configurado');
+            emailjs.init(key);
+            const plano = await montarPlanoEnvio(opts);
+            let total = 0;
+            for (const p of plano) {
+                const c = p.categorias;
+                const novos = c.novos||[];
+                const parado = c.parado||[];
+                const perto = c.perto||[];
+                const aguard10 = c.statusAguardando10||[];
+                const andam10 = c.statusAndamento10||[];
+                const status10 = [...aguard10, ...andam10];
+                const fora = c.foraPrazo||[];
+                const tem = novos.length||parado.length||perto.length||status10.length||fora.length;
+                if (!tem) continue;
+                const msg = buildEmailResumoAlertas(p.display, novos, parado, perto, 3, status10, fora);
+                const toList = [p.destinatario, p.cc].filter(Boolean).join(',');
+                const params = { to_email: toList, to_name: p.display, message_html: msg };
+                try {
+                    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, params);
+                    await registrarHistorico('resumo_alertas','Resumo de alertas', msg, p.destinatario, p.usuario, (novos.length+parado.length+perto.length+status10.length+fora.length), true, '');
+                    if (!opts?.modoCompleto) {
+                        atualizarCacheEnvio(p.destinatario, 'user_novos', novos);
+                        atualizarCacheEnvio(p.destinatario, 'user_parado', parado);
+                        atualizarCacheEnvio(p.destinatario, 'user_perto', perto);
+                        atualizarCacheEnvio(p.destinatario, 'user_aguardando10', aguard10);
+                        atualizarCacheEnvio(p.destinatario, 'user_andamento10', andam10);
+                        atualizarCacheEnvio(p.destinatario, 'user_fora', fora);
+                    }
+                    total += 1;
+                } catch(e) {
+                    await registrarHistorico('resumo_alertas','Resumo de alertas', msg, p.destinatario, p.usuario, (novos.length+parado.length+perto.length+status10.length+fora.length), false, e.message||String(e));
+                }
+            }
+            return total > 0;
+        }
+
+        async function checarEEnviarAlertas(opts) {
+            try {
+                const key = getEmailJsKey();
+                if (!key || !window.emailjs || !emailjs.init) return;
+                emailjs.init(key);
+                const { data: configs } = await supabase.from(ALERTAS_CONFIG).select('*').eq('ativo', true);
+                const linhas = enriquecerConsulta(dadosCompletos||[]);
+                const porUsuario = {};
+                linhas.forEach(l=>{ const u=l['Usuario Comentário']; if (!u) return; (porUsuario[u]=porUsuario[u]||[]).push(l); });
+                const enviados = new Set();
+                const onlyUsuarios = Array.isArray(opts?.onlyUsuarios) ? opts.onlyUsuarios : [];
+                const incluirGestora = !!opts?.incluirGestora;
+                const diasStatusOpen = parseInt(opts?.diasStatusOpen||'10',10);
+                const cfgsFiltrados = (configs||[]).filter(c=>{
+                    if (!onlyUsuarios.length) return ['Ana Leya Lima Alves Frota','ana.leya','Giovana Bruno da Silva','giovana.silva','Daniel Leite Pereira','daniel.leite'].includes(c.usuario);
+                    return onlyUsuarios.includes(c.usuario);
+                });
+                let ccGestora = '';
+                if (incluirGestora) {
+                    const { data: cfgGestoraArrLong } = await supabase.from(ALERTAS_CONFIG).select('*').eq('usuario','Graziela Silva dos Santos Galdino').limit(1);
+                    let cfgGestoraArr = cfgGestoraArrLong;
+                    if (!cfgGestoraArr || !cfgGestoraArr.length) {
+                        const { data: cfgGestoraArr2 } = await supabase.from(ALERTAS_CONFIG).select('*').eq('usuario','graziela.galdino').limit(1);
+                        cfgGestoraArr = cfgGestoraArr2;
+                    }
+                    const cfgGestoraFound = Array.isArray(cfgGestoraArr) && cfgGestoraArr[0] ? cfgGestoraArr[0] : null;
+                    if (cfgGestoraFound) ccGestora = cfgGestoraFound.email || '';
+                }
+                for (const cfg of cfgsFiltrados) {
+                const usuarioSel = cfg.usuario;
+                const usuarioLong = USUARIOS_MAP[usuarioSel] || usuarioSel;
+                const display = getDisplayFirstName(usuarioSel);
+                const lista = coletarLinhasUsuario(usuarioSel, linhas);
+                const isGestora = ['Graziela Silva dos Santos Galdino','graziela.galdino'].includes(String(usuarioSel));
+                const limite = getLimiteMs(usuarioLong);
+                    const pertoVencer = lista.filter(l=>{ if (!limite) return false; const ms=l.__tempoMs; const rest=limite-ms; return rest>0 && rest < (cfg.dias*24*60*60*1000); });
+                    const novos = lista.filter(l=>{ const di = l['Data Inclusão'] ? new Date(l['Data Inclusão']) : null; if (!di) return false; const diff = Date.now() - di.getTime(); return diff < (cfg.dias*24*60*60*1000); });
+                    const parado = lista.filter(l=>l.__situacao==='Parado');
+                    const statusXdias = lista.filter(l=>['Aguardando','Andamento'].includes(normalizarStatus(l.Status)) && (l.__diasAberto||0) > diasStatusOpen);
+                    const foraPrazo = lista.filter(l=>['Aguardando','Andamento'].includes(normalizarStatus(l.Status)) && l.__statusPrazo==='Fora do Prazo');
+                    const dedupByEvento = (arr)=>{
+                        const seen = new Set();
+                        return (arr||[]).filter(x=>{ const ev = String(x.Evento||''); if (!ev) return true; if (seen.has(ev)) return false; seen.add(ev); return true; });
+                    };
+                    const novosD = dedupByEvento(novos);
+                    const paradoD = dedupByEvento(parado);
+                    const pertoD = dedupByEvento(pertoVencer);
+                    const statusXD = dedupByEvento(statusXdias);
+                    const foraPrazoD = dedupByEvento(foraPrazo);
+                    if (!isGestora) {
+                        const novosFilt = filtrarNovosItensParaEnvio(cfg.email, 'user_novos', novosD);
+                        const paradoFilt = filtrarNovosItensParaEnvio(cfg.email, 'user_parado', paradoD);
+                        const pertoFilt = filtrarNovosItensParaEnvio(cfg.email, 'user_perto', pertoD);
+                        const statusFilt = filtrarNovosItensParaEnvio(cfg.email, 'user_status10', statusXD);
+                        const foraFilt = filtrarNovosItensParaEnvio(cfg.email, 'user_fora', foraPrazoD);
+                        const temAlgo = novosFilt.length || paradoFilt.length || pertoFilt.length || statusFilt.length || foraFilt.length;
+                        if (temAlgo && !enviados.has(cfg.email)) {
+                            const msg = buildEmailResumoAlertas(display, novosFilt, paradoFilt, pertoFilt, cfg.dias, statusFilt, foraFilt);
+                            const toList = [cfg.email, ccGestora].filter(Boolean).join(',');
+                            const params = { to_email: toList, to_name: display, message_html: msg };
+                            try { await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, params); await registrarHistorico('resumo_alertas','Resumo de alertas', msg, toList, usuarioSel, (novosFilt.length+paradoFilt.length+pertoFilt.length+statusFilt.length+foraFilt.length), true, ''); enviados.add(cfg.email); } catch(e) { await registrarHistorico('resumo_alertas','Resumo de alertas', msg, toList, usuarioSel, (novosFilt.length+paradoFilt.length+pertoFilt.length+statusFilt.length+foraFilt.length), false, e.message||String(e)); }
+                        }
+                    }
+                }
+                // Quando incluirGestora=true, gestora vai em cópia nos envios acima; não enviar e-mail separado
+                } catch(_){ }
+        }
+
+        // Carregar dados iniciais
+        async function carregarDadosIniciais() {
+            await carregarFiltros();
+            await carregarDados();
+        }
+
+        // Carregar opções dos filtros
+        async function carregarFiltros() {
+            try {
+                const { data, error } = await supabase
+                    .from(tabelaBase)
+                    .select('*')
+                    .limit(1000);
+
+                if (error) throw error;
+
+                dadosCompletos = data;
+                popularFiltros(data);
+                
+            } catch (error) {
+                console.error('Erro ao carregar filtros:', error);
+                alert('Erro ao carregar dados: ' + error.message);
+            }
+        }
+
+        function popularFiltros(dados) {
+            // Anos
+            const anos = [...new Set(dados.map(item => new Date(item['Data Ação']).getFullYear()))].filter(Boolean);
+            const selectAno = document.getElementById('filterAno');
+            anos.forEach(ano => {
+                const option = document.createElement('option');
+                option.value = ano;
+                option.textContent = ano;
+                selectAno.appendChild(option);
+            });
+
+            // Meses
+            const meses = [
+                {value: 1, text: 'Janeiro'}, {value: 2, text: 'Fevereiro'}, {value: 3, text: 'Março'},
+                {value: 4, text: 'Abril'}, {value: 5, text: 'Maio'}, {value: 6, text: 'Junho'},
+                {value: 7, text: 'Julho'}, {value: 8, text: 'Agosto'}, {value: 9, text: 'Setembro'},
+                {value: 10, text: 'Outubro'}, {value: 11, text: 'Novembro'}, {value: 12, text: 'Dezembro'}
+            ];
+            const selectMes = document.getElementById('filterMes');
+            meses.forEach(mes => {
+                const option = document.createElement('option');
+                option.value = mes.value;
+                option.textContent = mes.text;
+                selectMes.appendChild(option);
+            });
+
+            // Empresas
+            const empresas = [...new Set(dados.map(item => {
+                const empresa = item.Empresa || '';
+                return empresa.replace('Normaq ', '')
+                             .replace('Parnamirim', 'Natal')
+                             .replace('Normaq', '');
+            }))].filter(Boolean);
+            
+            const selectsEmpresa = ['filterEmpresa', 'consultaEmpresa'];
+            selectsEmpresa.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                empresas.forEach(empresa => {
+                    const option = document.createElement('option');
+                    option.value = empresa;
+                    option.textContent = empresa;
+                    select.appendChild(option);
+                });
+            });
+
+            // Status
+            const statusList = [...new Set(dados.map(item => item.Status))].filter(Boolean);
+            const selectsStatus = ['filterStatus', 'consultaStatus'];
+            selectsStatus.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                statusList.forEach(status => {
+                    const option = document.createElement('option');
+                    option.value = status;
+                    option.textContent = status;
+                    select.appendChild(option);
+                });
+            });
+
+            // Consultores
+            const consultores = [...new Set(dados.map(item => item['Usuario Comentário']))].filter(Boolean);
+            const selectsConsultor = ['filterConsultor', 'consultaConsultor'];
+            selectsConsultor.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                consultores.forEach(consultor => {
+                    const option = document.createElement('option');
+                    option.value = consultor;
+                    option.textContent = consultor;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        // Calcular tempo entre ações
+        function calcularTempoEntreAcoes(dadosFiltrados) {
+            const eventosAgrupados = {};
+            
+            // Agrupar por evento
+            dadosFiltrados.forEach(item => {
+                const evento = item.Evento;
+                if (!eventosAgrupados[evento]) {
+                    eventosAgrupados[evento] = [];
+                }
+                eventosAgrupados[evento].push({
+                    consultor: item['Usuario Comentário'],
+                    dataAcao: new Date(item['Data Ação']),
+                    evento: evento
+                });
+            });
+
+            // Ordenar por data e calcular tempos
+            const resultados = [];
+            Object.keys(eventosAgrupados).forEach(evento => {
+                const acoes = eventosAgrupados[evento].sort((a, b) => a.dataAcao - b.dataAcao);
+                
+                for (let i = 1; i < acoes.length; i++) {
+                    const tempoDiff = acoes[i].dataAcao - acoes[i-1].dataAcao;
+                    const dias = Math.floor(tempoDiff / (1000 * 60 * 60 * 24));
+                    const horas = Math.floor((tempoDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    
+                    resultados.push({
+                        evento: evento,
+                        consultor: acoes[i].consultor,
+                        tempoDias: dias,
+                        tempoHoras: horas,
+                        tempoTotalMs: tempoDiff,
+                        dataAcao: acoes[i].dataAcao
+                    });
+                }
+            });
+
+            return resultados;
+        }
+
+        // Carregar dados do dashboard
+        async function carregarDados() {
+            try {
+                const filters = getFilters();
+                let query = supabase.from(tabelaBase).select('*');
+                
+                // Aplicar filtros
+                if (filters.ano) {
+                    query = query.gte('Data Ação', `${filters.ano}-01-01`)
+                                .lt('Data Ação', `${parseInt(filters.ano) + 1}-01-01`);
+                }
+                
+                if (filters.mes) {
+                    // Lógica para filtrar por mês específico
+                }
+                
+                if (filters.empresa) {
+                    query = query.ilike('Empresa', `%${filters.empresa}%`);
+                }
+                
+                if (filters.status) {
+                    query = query.eq('Status', filters.status);
+                }
+                
+                if (filters.evento) {
+                    query = query.ilike('Evento', `%${filters.evento}%`);
+                }
+                
+                if (filters.consultor) {
+                    query = query.eq('Usuario Comentário', filters.consultor);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+
+                dadosCompletos = data;
+                atualizarCards(data);
+                atualizarGraficos(data);
+                atualizarTabelaAtrasosDashboard(data);
+                atualizarGraficoPrazoConsultor(data);
+                renderDashboardNotifs();
+                
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+            }
+        }
+
+        function limparFiltrosDashboard() {
+            const ids = ['filterAno','filterMes','filterEmpresa','filterStatus','filterSituacao','filterStatusPrazo','filterEvento','filterConsultor'];
+            ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            carregarDados();
+        }
+
+        function getFilters() {
+            return {
+                ano: document.getElementById('filterAno').value,
+                mes: document.getElementById('filterMes').value,
+                empresa: document.getElementById('filterEmpresa').value,
+                status: document.getElementById('filterStatus').value,
+                evento: document.getElementById('filterEvento').value,
+                consultor: document.getElementById('filterConsultor').value,
+                situacao: (document.getElementById('filterSituacao')||{}).value || ''
+            };
+        }
+
+        function atualizarCards(dados) {
+            const container = document.getElementById('cardsContainer');
+            
+            const eventosUnicos = [...new Set(dados.map(item => item.Evento))];
+
+            const linhas = enriquecerConsulta(dados);
+            const ultimas = obterUltimasPorEvento(linhas);
+            const atrasosUlt = ultimas.filter(l => l.__statusPrazo === 'Fora do Prazo');
+            const dentroUlt = ultimas.filter(l => l.__statusPrazo === 'Dentro do Prazo');
+            const totalAtrasos = atrasosUlt.length;
+            const consultoresComAtrasoSet = new Set(atrasosUlt.map(l => l['Usuario Comentário']).filter(Boolean));
+            const totalMsFora = atrasosUlt.reduce((a, l) => a + (l.__tempoMs || 0), 0);
+            const totalMsDentro = dentroUlt.reduce((a, l) => a + (l.__tempoMs || 0), 0);
+
+            // Situação por evento (última linha efetiva) baseada em __situacao calculada
+            const countParado = ultimas.filter(l => l.__situacao === 'Parado').length;
+            const countAndamento = ultimas.filter(l => l.__situacao === 'Em Andamento').length;
+            const currentByStatus = { Aguardando: 0, Andamento: 0, Sucesso: 0, Insucesso: 0 };
+            ultimas.forEach(l => {
+                const s = normalizarStatus(l.Status);
+                if (currentByStatus.hasOwnProperty(s)) currentByStatus[s] += 1;
+            });
+
+            container.innerHTML = `
+                <div class="card">
+                    <h3>📋 Total de Eventos</h3>
+                    <div class="value">${eventosUnicos.length}</div>
+                    <div class="subtitle">Eventos únicos no período</div>
+                </div>
+                
+                <div class="card ${totalAtrasos > 0 ? 'danger' : 'success'}">
+                    <h3>⏰ Atrasos Detectados</h3>
+                    <div class="value">${totalAtrasos ? diffToStr(Math.round(totalMsFora / totalAtrasos)) : '0d 0h'}</div>
+                    <div class="subtitle">${totalAtrasos} atrasos</div>
+                </div>
+
+                
+                <div class="card">
+                    <h3>✅ Aguardando</h3>
+                    <div class="value">${currentByStatus['Aguardando']}</div>
+                    <div class="subtitle">Eventos em espera</div>
+                </div>
+
+                <div class="card">
+                    <h3>🔄 Andamento</h3>
+                    <div class="value">${currentByStatus['Andamento']}</div>
+                    <div class="subtitle">Em processamento</div>
+                </div>
+
+                <div class="card success">
+                    <h3>🎯 Sucesso</h3>
+                    <div class="value">${currentByStatus['Sucesso']}</div>
+                    <div class="subtitle">Finalizados com sucesso</div>
+                </div>
+
+                <div class="card danger">
+                    <h3>❌ Insucesso</h3>
+                    <div class="value">${currentByStatus['Insucesso']}</div>
+                    <div class="subtitle">Finalizados sem sucesso</div>
+                </div>
+
+                <div class="card danger">
+                    <h3>⛔ Fora do Prazo</h3>
+                    <div class="value">${totalAtrasos}</div>
+                    <div class="subtitle">Tempo total ${diffToStr(totalMsFora)}</div>
+                </div>
+
+                <div class="card success">
+                    <h3>🟢 Dentro do Prazo</h3>
+                    <div class="value">${dentroUlt.length}</div>
+                    <div class="subtitle">Tempo total ${diffToStr(totalMsDentro)}</div>
+                </div>
+
+                <div class="card danger">
+                    <h3>⛔ Parado</h3>
+                    <div class="value">${countParado}</div>
+                    <div class="subtitle">Eventos com prazo estourado</div>
+                </div>
+
+                <div class="card warning">
+                    <h3>🟡 Em Andamento</h3>
+                    <div class="value">${countAndamento}</div>
+                    <div class="subtitle">Eventos abertos no prazo</div>
+                </div>
+
+                <div class="card danger">
+                    <h3>🏆 Top 3 Atrasos</h3>
+                    <div class="value" style="font-size: 14px; line-height: 1.4">
+                        ${Array.from(consultoresComAtrasoSet).map(n => ({
+                            nome: n,
+                            q: atrasosUlt.filter(l => l['Usuario Comentário'] === n).length
+                        })).sort((a,b)=>b.q-a.q).slice(0,3).map(c => `
+                            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin:2px 0;">
+                                <span>${c.nome}</span>
+                                <button class="btn" onclick="mostrarAtrasosConsultor('${c.nome.replace(/'/g,"\'")}')">${c.q}</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="subtitle">Clique no número para ver eventos</div>
+                </div>
+
+                <div class="card success">
+                    <h3>🏆 Top 3 Dentro do Prazo</h3>
+                    <div class="value" style="font-size: 14px; line-height: 1.4">
+                        ${Array.from(new Set(dentroUlt.map(l=>l['Usuario Comentário']).filter(Boolean))).map(n => ({
+                            nome: n,
+                            q: dentroUlt.filter(l => l['Usuario Comentário'] === n).length
+                        })).sort((a,b)=>b.q-a.q).slice(0,3).map(c => `
+                            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin:2px 0;">
+                                <span>${c.nome}</span>
+                                <button class="btn" onclick="mostrarDentroPrazoConsultor('${c.nome.replace(/'/g,"\'")}')">${c.q}</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="subtitle">Clique no número para ver eventos</div>
+                </div>
+            `;
+            try { animarValoresCards(); } catch(_){ }
+        }
+
+        function animarValoresCards() {
+            const vals = Array.from(document.querySelectorAll('.cards-grid .card .value'));
+            vals.forEach(el=>{
+                const txt = (el.textContent||'').trim();
+                if (!/^\d+$/.test(txt)) return;
+                const alvo = parseInt(txt,10);
+                let atual = 0;
+                const dur = 600;
+                const start = performance.now();
+                const step = (t)=>{
+                    const p = Math.min(1,(t-start)/dur);
+                    atual = Math.round(alvo * p);
+                    el.textContent = String(atual);
+                    if (p<1) requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        function atualizarGraficos(dados) {
+            const mesesLabels = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            const eventosPorMes = Array(12).fill(0).map(() => new Set());
+            dados.forEach(item => {
+                const data = new Date(item['Data Ação']);
+                const m = data.getMonth();
+                eventosPorMes[m].add(item.Evento);
+            });
+
+            const ctx1 = document.getElementById('graficoEventos').getContext('2d');
+            if (graficoEventos) graficoEventos.destroy();
+            
+            graficoEventos = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: mesesLabels,
+                    datasets: [{
+                        label: 'Eventos por Mês',
+                        data: eventosPorMes.map(set => set.size),
+                        backgroundColor: '#3498db',
+                        borderColor: '#2980b9',
+                        borderWidth: 1,
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    layout: { padding: 8 },
+                    scales: {
+                        x: { ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 }, grid: { display: false } },
+                        y: { beginAtZero: true, grid: { color: '#eee' } }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '📊 Total de Eventos por Mês',
+                            font: { size: 14 }
+                        },
+                        legend: { labels: { font: { size: 12 } } }
+                    }
+                }
+            });
+
+            // Gráfico de tempo médio por consultor
+            const temposResposta = calcularTempoEntreAcoes(dados);
+            const tempoPorConsultor = {};
+            temposResposta.forEach(item => {
+                if (!tempoPorConsultor[item.consultor]) {
+                    tempoPorConsultor[item.consultor] = { total: 0, count: 0 };
+                }
+                tempoPorConsultor[item.consultor].total += item.tempoTotalMs;
+                tempoPorConsultor[item.consultor].count++;
+            });
+
+            const ctx2 = document.getElementById('graficoConsultores').getContext('2d');
+            if (graficoConsultores) graficoConsultores.destroy();
+            
+            const nomesPermitidos = ['daniel','ana','giovana'];
+            const curtoNome = (nome) => {
+                const n = (nome||'').toLowerCase();
+                if (n.includes('daniel')) return 'Daniel';
+                if (n.includes('giovana')) return 'Giovana';
+                if (n.includes('ana')) return 'Ana';
+                return (nome||'').split(' ')[0] || nome;
+            };
+            const labelsConsultores = ['Daniel','Giovana','Ana'];
+            const agreg = { Daniel: { total: 0, count: 0 }, Giovana: { total: 0, count: 0 }, Ana: { total: 0, count: 0 } };
+            Object.keys(tempoPorConsultor).forEach(nome => {
+                const nl = (nome||'').toLowerCase();
+                if (nomesPermitidos.some(p => nl.includes(p))) {
+                    const s = curtoNome(nome);
+                    agreg[s].total += tempoPorConsultor[nome].total;
+                    agreg[s].count += tempoPorConsultor[nome].count;
+                }
+            });
+            const dadosConsultores = labelsConsultores.map(n => agreg[n].count ? (agreg[n].total / agreg[n].count) / (1000 * 60 * 60 * 24) : 0);
+
+            graficoConsultores = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labelsConsultores,
+                    datasets: [{
+                        label: 'Tempo Médio (dias)',
+                        data: dadosConsultores,
+                        backgroundColor: '#e74c3c',
+                        borderColor: '#c0392b',
+                        borderWidth: 1,
+                        barPercentage: 0.6,
+                        categoryPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    layout: { padding: 8 },
+                    scales: {
+                        x: { ticks: { autoSkip: true, maxRotation: 0, minRotation: 0 }, grid: { display: false } },
+                        y: { beginAtZero: true, grid: { color: '#eee' } }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '⏱️ Tempo Médio de Resposta por Consultor (em dias)',
+                            font: { size: 14 }
+                        },
+                        legend: { labels: { font: { size: 12 } } }
+                    }
+                }
+            });
+        }
+
+        let graficoPrazoConsultor;
+        function atualizarGraficoPrazoConsultor(dados) {
+            const select = document.getElementById('filterStatusPrazo');
+            const statusPrazoFiltro = select ? select.value : '';
+            const linhas = enriquecerConsulta(dados);
+            const curtoNome = (nome) => {
+                const n = (nome||'').toLowerCase();
+                if (n.includes('daniel')) return 'Daniel';
+                if (n.includes('giovana')) return 'Giovana';
+                if (n.includes('ana')) return 'Ana';
+                return (nome||'').split(' ')[0] || nome;
+            };
+            const labels = ['Daniel','Giovana','Ana'];
+            const dentroCounts = labels.map(lb => linhas.filter(l => curtoNome(l['Usuario Comentário']||'') === lb && l.__statusPrazo === 'Dentro do Prazo').length);
+            const foraCounts = labels.map(lb => linhas.filter(l => curtoNome(l['Usuario Comentário']||'') === lb && l.__statusPrazo === 'Fora do Prazo').length);
+            const datasets = [];
+            if (!statusPrazoFiltro || statusPrazoFiltro === 'Dentro do Prazo') {
+                datasets.push({
+                    label: 'Dentro do Prazo',
+                    data: dentroCounts,
+                    backgroundColor: '#2ecc71',
+                    borderColor: '#27ae60',
+                    borderWidth: 1
+                });
+            }
+            if (!statusPrazoFiltro || statusPrazoFiltro === 'Fora do Prazo') {
+                datasets.push({
+                    label: 'Fora do Prazo',
+                    data: foraCounts,
+                    backgroundColor: '#e74c3c',
+                    borderColor: '#c0392b',
+                    borderWidth: 1
+                });
+            }
+
+            const ctx = document.getElementById('graficoPrazoConsultor');
+            if (!ctx) return;
+            const gctx = ctx.getContext('2d');
+            if (graficoPrazoConsultor) graficoPrazoConsultor.destroy();
+            graficoPrazoConsultor = new Chart(gctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    layout: { padding: 8 },
+                    scales: {
+                        x: { ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 }, grid: { display: false } },
+                        y: { beginAtZero: true, grid: { color: '#eee' } }
+                    },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        title: { display: true, text: 'Dentro x Fora do Prazo por Consultor', font: { size: 14 } },
+                        legend: { labels: { font: { size: 12 } } },
+                        tooltip: {
+                            enabled: true,
+                            callbacks: {
+                                label: function(ctx) {
+                                    const label = ctx.dataset.label || '';
+                                    const value = ctx.parsed.y;
+                                    return `${label}: ${value}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        const statusPrazoEl = document.getElementById('filterStatusPrazo');
+        if (statusPrazoEl) {
+            statusPrazoEl.addEventListener('change', () => atualizarGraficoPrazoConsultor(dadosCompletos));
+        }
+
+        const situacaoEl = document.getElementById('filterSituacao');
+        if (situacaoEl) {
+            situacaoEl.addEventListener('change', () => {
+                atualizarTabelaAtrasosDashboard(dadosCompletos);
+                atualizarCards(dadosCompletos);
+                renderDashboardNotifs();
+            });
+        }
+
+        function abrirComentario(el) {
+            const encoded = el.getAttribute('data-comment') || '';
+            const texto = decodeURIComponent(encoded);
+            abrirModalTexto(texto);
+        }
+
+        function abrirModalTexto(texto) {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = '';
+            const box = document.createElement('div');
+            box.style.whiteSpace = 'pre-wrap';
+            box.textContent = texto || '';
+            content.appendChild(box);
+            overlay.style.display = 'flex';
+        }
+
+        function mostrarAtrasosConsultor(nome) {
+            const todas = enriquecerConsulta(dadosCompletos||[]);
+            const ultimas = obterUltimasPorEvento(todas);
+            const linhas = ultimas.filter(l => l['Usuario Comentário'] === nome && l.__statusPrazo === 'Fora do Prazo');
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div style="margin-bottom:8px;font-weight:600;">Atrasos de ${nome}</div>
+                ${linhas.length ? linhas.map(l => `
+                    <div style="padding:6px 0;border-bottom:1px solid #eee;">
+                        <div><strong>Evento:</strong> ${l.Evento || ''}</div>
+                        <div><strong>Encaminhamento:</strong> ${l['Data Ação'] ? new Date(l['Data Ação']).toLocaleString('pt-BR') : ''}</div>
+                        <div><strong>Tempo:</strong> ${l.__tempoAcoes || ''}</div>
+                        <div><strong>Status Prazo:</strong> ${l.__statusPrazo || ''}</div>
+                    </div>
+                `).join('') : '<div>Sem atrasos para este consultor.</div>'}
+                <div style="margin-top:12px;display:flex;gap:8px;">
+                    <button class="btn" onclick="irParaConsultaAtrasosConsultor('${nome.replace(/'/g,"\'")}')">Ver na Área de Consulta</button>
+                    <button class="btn" onclick="fecharModal()">Fechar</button>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function mostrarDentroPrazoConsultor(nome) {
+            const todas = enriquecerConsulta(dadosCompletos||[]);
+            const ultimas = obterUltimasPorEvento(todas);
+            const linhas = ultimas.filter(l => l['Usuario Comentário'] === nome && l.__statusPrazo === 'Dentro do Prazo');
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div style="margin-bottom:8px;font-weight:600;">Dentro do Prazo de ${nome}</div>
+                ${linhas.length ? linhas.map(l => `
+                    <div style="padding:6px 0;border-bottom:1px solid #eee;">
+                        <div><strong>Evento:</strong> ${l.Evento || ''}</div>
+                        <div><strong>Encaminhamento:</strong> ${l['Data Ação'] ? new Date(l['Data Ação']).toLocaleString('pt-BR') : ''}</div>
+                        <div><strong>Tempo:</strong> ${l.__tempoAcoes || ''}</div>
+                        <div><strong>Status Prazo:</strong> ${l.__statusPrazo || ''}</div>
+                    </div>
+                `).join('') : '<div>Sem itens dentro do prazo para este consultor.</div>'}
+                <div style="margin-top:12px;display:flex;gap:8px;">
+                    <button class="btn" onclick="irParaConsultaDentroConsultor('${nome.replace(/'/g,"\'")}')">Ver na Área de Consulta</button>
+                    <button class="btn" onclick="fecharModal()">Fechar</button>
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function irParaConsultaDentroConsultor(nome) {
+            openTab('consulta');
+            const sel = document.getElementById('consultaConsultor');
+            const sp = document.getElementById('consultaStatusPrazo');
+            if (sel) sel.value = nome;
+            if (sp) sp.value = 'Dentro do Prazo';
+            carregarConsulta();
+            fecharModal();
+        }
+        function abrirListaEventosNotifs(titulo, numsStr) {
+            const nums = String(numsStr||'').split(',').map(s=>s.trim()).filter(Boolean);
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            content.innerHTML = `
+                <div class="modal-header"><span>${titulo}</span><button style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="fecharModal()"><i class="fas fa-times"></i></button></div>
+                <div style="padding:10px;">
+                    ${nums.length ? nums.map(n=>`<div style=\"display:flex;justify-content:space-between;gap:8px;align-items:center;border-bottom:1px solid #eee;padding:6px 0;\"><span>Evento ${n}</span><button class=\"btn btn-sm\" onclick=\"abrirProcessoEvento('${n}')\">Abrir</button></div>`).join('') : '<div>Sem eventos.</div>'}
+                </div>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        function renderDashboardNotifs() {
+            const cont = document.getElementById('notifContainer');
+            if (!cont) return;
+            const chip = document.querySelector('.user-chip');
+            const usuarioShort = chip ? (chip.textContent||'').trim() : '';
+            const usuarioLong = USUARIOS_MAP[usuarioShort] || usuarioShort;
+            const linhas = enriquecerConsulta(dadosCompletos||[]);
+            const matchUser = (nome) => {
+                const n = String(nome||'').toLowerCase();
+                const long = String(usuarioLong||'').toLowerCase();
+                const short = String(usuarioShort||'').toLowerCase();
+                if (!short && !long) return true;
+                if (n === long) return true;
+                const parts = short.split('.').filter(Boolean);
+                if (parts.length && parts.every(p=>n.includes(p))) return true;
+                const first = parts[0] || short.split(' ')[0] || short;
+                if (first && n.includes(first)) return true;
+                return false;
+            };
+            const lista = linhas.filter(l=>matchUser(l['Usuario Comentário']));
+            const porEvento = {};
+            lista.forEach(l=>{ const ev = String(l.Evento||''); if (!ev) return; const da = l['Data Ação']?new Date(l['Data Ação']).getTime():0; const cur = porEvento[ev]; if (!cur || da > (cur['Data Ação']?new Date(cur['Data Ação']).getTime():0)) porEvento[ev]=l; });
+            const ultimas = Object.values(porEvento);
+            const foraPrazo = ultimas.filter(l=>l.__statusPrazo==='Fora do Prazo');
+            const parado = ultimas.filter(l=>l.__situacao==='Parado');
+            const mk = (titulo, msg, nums)=>{
+                return `
+                    <div class="notif-card">
+                        <div class="notif-header">
+                            <div class="notif-title">${titulo}</div>
+                            <button class="notif-close" onclick="this.closest('.notif-card').remove()">×</button>
+                        </div>
+                        <div style="color:#333;">${msg}</div>
+                        ${nums && nums.length ? `<div style=\"margin-top:8px;display:flex;justify-content:flex-end;\"><button class=\"btn btn-sm\" onclick=\"abrirListaEventosNotifs('${titulo.replace(/'/g,"\'")}', '${nums.join(',')}')\">Ver Eventos</button></div>` : ''}
+                    </div>
+                `;
+            };
+            const cards = [];
+            const numsFora = Array.from(new Set(foraPrazo.map(l=>String(l.Evento||'')).filter(Boolean)));
+            const numsParado = Array.from(new Set(parado.map(l=>String(l.Evento||'')).filter(Boolean)));
+            if (foraPrazo.length) cards.push(mk('Eventos Fora do Prazo', `Você tem ${foraPrazo.length} evento(s) fora do prazo.`, numsFora));
+            if (parado.length) cards.push(mk('Eventos Parados', `Você tem ${parado.length} evento(s) parado(s).`, numsParado));
+            cont.innerHTML = cards.join('');
+        }
+
+        function irParaConsultaAtrasosConsultor(nome) {
+            openTab('consulta');
+            const sel = document.getElementById('consultaConsultor');
+            const sp = document.getElementById('consultaStatusPrazo');
+            if (sel) sel.value = nome;
+            if (sp) sp.value = 'Fora do Prazo';
+            carregarConsulta();
+            fecharModal();
+        }
+
+        async function abrirProcessoEvento(evento) {
+            try {
+                let query = supabase.from(tabelaBase).select('*');
+                const num = parseInt(evento, 10);
+                if (!isNaN(num)) {
+                    query = query.eq('Evento', num);
+                } else {
+                    query = query.ilike('Evento', `%${evento}%`);
+                }
+                const { data, error } = await query;
+                if (error) throw error;
+                const todos = Array.isArray(data) ? data : [];
+                const linhas = enriquecerConsulta(todos).sort((a,b)=>new Date(a['Data Ação']) - new Date(b['Data Ação']));
+                const overlay = document.getElementById('modalOverlay');
+                const content = document.getElementById('modalContent');
+                const cliente = linhas[0]?.Cliente || '';
+                content.innerHTML = `
+                    <div style="font-weight:700;margin-bottom:8px;">Processo do Evento ${evento} ${cliente ? '— '+cliente : ''}</div>
+                    ${linhas.length ? linhas.map(l => `
+                        <div style="padding:8px;border-bottom:1px solid #eee;">
+                            <div><strong>Status:</strong> <span class="status-badge">${l.Status || ''}</span> &nbsp; <strong>Situação:</strong> <span class="${l.__situacao === 'Parado' ? 'situacao-parado' : (l.__situacao === 'Em Andamento' ? 'situacao-andamento' : '')}">${l.__situacao || ''}</span></div>
+                            <div><strong>Consultor:</strong> ${formatarConsultor(l['Usuario Comentário'] || '')}</div>
+                            <div><strong>Data Inclusão:</strong> ${l['Data Inclusão'] ? new Date(l['Data Inclusão']).toLocaleString('pt-BR') : ''}</div>
+                            <div><strong>Encaminhamento:</strong> ${l['Data Ação'] ? new Date(l['Data Ação']).toLocaleString('pt-BR') : ''}</div>
+                            <div><strong>Tempo Ações:</strong> ${l.__tempoAcoes || ''} &nbsp; <strong>Status Prazo:</strong> <span class="status-prazo ${l.__statusPrazo === 'Fora do Prazo' ? 'atraso' : (l.__statusPrazo === 'Dentro do Prazo' ? 'no-atraso' : '')}">${l.__statusPrazo || ''}</span></div>
+                            <div><strong>Comentário:</strong> ${(l['Comentário Evento'] || '').replace(/\s+/g,' ')}</div>
+                        </div>
+                    `).join('') : '<div>Sem histórico para este evento.</div>'}
+                    <div style="margin-top:12px;text-align:right;">
+                        <button class="btn" onclick="fecharModal()">Fechar</button>
+                    </div>
+                `;
+                overlay.style.display = 'flex';
+            } catch (e) {
+                console.error('Erro ao carregar processo do evento:', e);
+            }
+        }
+
+        function fecharModal() {
+            const overlay = document.getElementById('modalOverlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
+        let _consultaColState = {};
+        let _dashboardColState = {};
+
+        function saveConsultaPrefs() {
+            try {
+                localStorage.setItem('consultaColState', JSON.stringify(_consultaColState || {}));
+                const table = getConsultaTable();
+                const aligns = {};
+                if (table) {
+                    Array.from(table.querySelectorAll('thead th')).forEach((th,i)=>{
+                        const a = th.style.textAlign || '';
+                        if (a) aligns[i] = a;
+                    });
+                }
+                localStorage.setItem('consultaAlignState', JSON.stringify(aligns));
+            } catch(e) {}
+        }
+
+        function applyConsultaPrefs() {
+            try {
+                const widths = JSON.parse(localStorage.getItem('consultaColState')||'{}');
+                Object.keys(widths).forEach(k => setColumnWidth(parseInt(k,10), widths[k]));
+                const aligns = JSON.parse(localStorage.getItem('consultaAlignState')||'{}');
+                const table = getConsultaTable();
+                if (table) {
+                    Object.keys(aligns).forEach(k => {
+                        const idx = parseInt(k,10);
+                        const val = aligns[k];
+                        const th = table.querySelector(`thead th:nth-child(${idx+1})`);
+                        if (th && val) th.style.textAlign = val;
+                        Array.from(table.querySelectorAll(`tbody td:nth-child(${idx+1})`)).forEach(td => { if (val) td.style.textAlign = val; });
+                    });
+                }
+            } catch(e) {}
+        }
+
+        function enforceConsultaComentarioWidth() {
+            const table = getConsultaTable();
+            if (!table) return;
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const idx = headers.findIndex(th => th.classList.contains('col-comentario') || (th.textContent||'').trim().toLowerCase() === 'comentário evento');
+            if (idx >= 0) setColumnWidth(idx, 150);
+        }
+
+        function getConsultaTable() {
+            return document.querySelector('#tabelaConsulta table');
+        }
+
+        function popularControleColunas() {
+            const table = getConsultaTable();
+            if (!table) return;
+            const controls = document.getElementById('colSelectConsulta');
+            if (!controls) return;
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            controls.innerHTML = headers.map((th, i) => `<option value="${i}">${th.textContent.trim()}</option>`).join('');
+            enableColumnResizing(table);
+            applyConsultaPrefs();
+        }
+
+        function setColumnWidth(index, widthPx) {
+            const table = getConsultaTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            if (!th) return;
+            const min = Math.max(20, widthPx);
+            th.style.width = min + 'px';
+            th.style.minWidth = min + 'px';
+            Array.from(table.querySelectorAll(`tbody td:nth-child(${index+1})`)).forEach(td => {
+                td.style.width = min + 'px';
+                td.style.minWidth = min + 'px';
+            });
+            _consultaColState[index] = min;
+            saveConsultaPrefs();
+        }
+
+        function ajustarLarguraConsulta(delta) {
+            const select = document.getElementById('colSelectConsulta');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            const table = getConsultaTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            const current = _consultaColState[index] || (th ? th.getBoundingClientRect().width : 120);
+            setColumnWidth(index, current + delta);
+        }
+
+        function aplicarAlinhamentoConsulta() {
+            const select = document.getElementById('colSelectConsulta');
+            const alignSel = document.getElementById('alignSelectConsulta');
+            if (!select || !alignSel) return;
+            const index = parseInt(select.value, 10);
+            const align = alignSel.value;
+            const table = getConsultaTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            if (th) th.style.textAlign = align;
+            Array.from(table.querySelectorAll(`tbody td:nth-child(${index+1})`)).forEach(td => td.style.textAlign = align);
+            saveConsultaPrefs();
+        }
+
+        function resetarAjustesConsulta() {
+            const table = getConsultaTable();
+            if (!table) return;
+            Array.from(table.querySelectorAll('thead th, tbody td')).forEach(el => {
+                el.style.width = '';
+                el.style.minWidth = '';
+                el.style.textAlign = '';
+            });
+            _consultaColState = {};
+            try {
+                localStorage.removeItem('consultaColState');
+                localStorage.removeItem('consultaAlignState');
+            } catch(e) {}
+        }
+
+        function enableColumnResizing(table) {
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            headers.forEach((th, idx) => {
+                const old = th.querySelector('.resize-handle');
+                if (old) old.remove();
+                const handle = document.createElement('span');
+                handle.className = 'resize-handle';
+                th.appendChild(handle);
+                let startX = 0;
+                let startW = 0;
+                const onMove = (e) => {
+                    const delta = e.pageX - startX;
+                    setColumnWidth(idx, startW + delta);
+                };
+                const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                handle.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    startX = e.pageX;
+                    startW = th.getBoundingClientRect().width;
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+            });
+        }
+
+        function getDashboardAtrasosTable() {
+            return document.querySelector('#tabelaAtrasosDashboard table');
+        }
+
+        function popularControleColunasDashboard() {
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            const controls = document.getElementById('colSelectDashboard');
+            if (!controls) return;
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            controls.innerHTML = headers.map((th, i) => `<option value="${i}">${th.textContent.trim()}</option>`).join('');
+            enableColumnResizing(table);
+            applyDashboardPrefs();
+        }
+
+        function setDashboardColumnWidth(index, widthPx) {
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            if (!th) return;
+            const min = Math.max(20, widthPx);
+            th.style.width = min + 'px';
+            th.style.minWidth = min + 'px';
+            Array.from(table.querySelectorAll(`tbody td:nth-child(${index+1})`)).forEach(td => {
+                td.style.width = min + 'px';
+                td.style.minWidth = min + 'px';
+            });
+            _dashboardColState[index] = min;
+            saveDashboardPrefs();
+        }
+
+        function ajustarLarguraDashboard(delta) {
+            const select = document.getElementById('colSelectDashboard');
+            if (!select) return;
+            const index = parseInt(select.value, 10);
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            const current = _dashboardColState[index] || (th ? th.getBoundingClientRect().width : 120);
+            setDashboardColumnWidth(index, current + delta);
+        }
+
+        function aplicarAlinhamentoDashboard() {
+            const select = document.getElementById('colSelectDashboard');
+            const alignSel = document.getElementById('alignSelectDashboard');
+            if (!select || !alignSel) return;
+            const index = parseInt(select.value, 10);
+            const align = alignSel.value;
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            const th = table.querySelector(`thead th:nth-child(${index+1})`);
+            if (th) th.style.textAlign = align;
+            Array.from(table.querySelectorAll(`tbody td:nth-child(${index+1})`)).forEach(td => td.style.textAlign = align);
+            saveDashboardPrefs();
+        }
+
+        function resetarAjustesDashboard() {
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            Array.from(table.querySelectorAll('thead th, tbody td')).forEach(el => {
+                el.style.width = '';
+                el.style.minWidth = '';
+                el.style.textAlign = '';
+            });
+            _dashboardColState = {};
+            try {
+                localStorage.removeItem('dashboardColState');
+                localStorage.removeItem('dashboardAlignState');
+            } catch(e) {}
+        }
+
+        function saveDashboardPrefs() {
+            try {
+                localStorage.setItem('dashboardColState', JSON.stringify(_dashboardColState || {}));
+                const table = getDashboardAtrasosTable();
+                const aligns = {};
+                if (table) {
+                    Array.from(table.querySelectorAll('thead th')).forEach((th,i)=>{
+                        const a = th.style.textAlign || '';
+                        if (a) aligns[i] = a;
+                    });
+                }
+                localStorage.setItem('dashboardAlignState', JSON.stringify(aligns));
+            } catch(e) {}
+        }
+
+        function applyDashboardPrefs() {
+            try {
+                const widths = JSON.parse(localStorage.getItem('dashboardColState')||'{}');
+                Object.keys(widths).forEach(k => setDashboardColumnWidth(parseInt(k,10), widths[k]));
+                const aligns = JSON.parse(localStorage.getItem('dashboardAlignState')||'{}');
+                const table = getDashboardAtrasosTable();
+                if (table) {
+                    Object.keys(aligns).forEach(k => {
+                        const idx = parseInt(k,10);
+                        const val = aligns[k];
+                        const th = table.querySelector(`thead th:nth-child(${idx+1})`);
+                        if (th && val) th.style.textAlign = val;
+                        Array.from(table.querySelectorAll(`tbody td:nth-child(${idx+1})`)).forEach(td => { if (val) td.style.textAlign = val; });
+                    });
+                }
+            } catch(e) {}
+        }
+
+        function enforceDashboardComentarioWidth() {
+            const table = getDashboardAtrasosTable();
+            if (!table) return;
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const idx = headers.findIndex(th => th.classList.contains('col-comentario') || (th.textContent||'').trim().toLowerCase() === 'comentário evento');
+            if (idx >= 0) setDashboardColumnWidth(idx, 150);
+        }
+
+        function atualizarTabelaAtrasosDashboard(dados) {
+            const container = document.getElementById('tabelaAtrasosDashboard');
+            if (!container) return;
+            let linhas = enriquecerConsulta(dados);
+            const sitSel = (document.getElementById('filterSituacao')||{}).value || '';
+            if (sitSel) {
+                linhas = linhas.filter(l => l.__situacao === sitSel);
+            } else {
+                linhas = linhas.filter(l => l.__statusPrazo === 'Fora do Prazo');
+            }
+            if (!linhas.length) {
+                container.innerHTML = '<div class="loading">Sem atrasos para os filtros atuais</div>';
+                return;
+            }
+            const html = `
+                <div class="column-controls" id="dashboardColumnControls">
+                    <label>Coluna</label>
+                    <select id="colSelectDashboard"></select>
+                    <button class="btn" onclick="ajustarLarguraDashboard(-20)">− largura</button>
+                    <button class="btn" onclick="ajustarLarguraDashboard(20)">+ largura</button>
+                    <label>Alinhamento</label>
+                    <select id="alignSelectDashboard">
+                        <option value="left">Esquerda</option>
+                        <option value="center" selected>Centro</option>
+                        <option value="right">Direita</option>
+                    </select>
+                    <button class="btn" onclick="aplicarAlinhamentoDashboard()">Aplicar</button>
+                    <button class="btn" onclick="resetarAjustesDashboard()">Resetar</button>
+                </div>
+                <div class="table-scroll consulta-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sticky">Evento</th>
+                            <th class="sticky col-cliente">Cliente</th>
+                            <th class="sticky col-consultor">Consultor</th>
+                            <th class="sticky">Dias em Aberto</th>
+                            <th class="sticky">Dias Concluídos</th>
+                            <th class="sticky">Status Prazo</th>
+                            <th class="sticky col-situacao">Situação Evento</th>
+                            <th class="sticky col-tempo">Tempo Ações</th>
+                            <th class="sticky">Data Inclusão</th>
+                            <th class="sticky">Encaminhamento</th>
+                            <th class="sticky col-comentario">Comentário Evento</th>
+                            <th>O.S</th>
+                            <th>Data de Submissão</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                                ${linhas.map(item => `
+                            <tr>
+                                <td><button class="btn" style="padding:4px 8px" onclick="abrirProcessoEvento('${String(item.Evento||'').replace(/'/g, "\\'")}')">${item.Evento || ''}</button></td>
+                                <td class="col-cliente">${item.Cliente || ''}</td>
+                                <td class="consultor-cell col-consultor">${formatarConsultor(item['Usuario Comentário'] || '')}</td>
+                                <td class="col-num">${item.__diasAberto ?? ''}</td>
+                                <td class="col-num">${item.__diasConcluidos ?? ''}</td>
+                                <td class="${item.__statusPrazo === 'Fora do Prazo' ? 'atraso' : 'no-atraso'}">${item.__statusPrazo}</td>
+                                <td class="col-situacao"><span class="${item.__situacao === 'Parado' ? 'situacao-parado' : (item.__situacao === 'Em Andamento' ? 'situacao-andamento' : '')}">${item.__situacao || ''}</span></td>
+                                <td class="col-tempo">${item.__tempoAcoes || ''}</td>
+                                <td>${item['Data Inclusão'] ? new Date(item['Data Inclusão']).toLocaleString('pt-BR') : ''}</td>
+                                <td>${item['Data Ação'] ? new Date(item['Data Ação']).toLocaleString('pt-BR') : ''}</td>
+                                <td class="col-comentario" title="Clique para ver completo" onclick="abrirComentario(this)" data-comment="${encodeURIComponent(item['Comentário Evento'] || '')}">${(item['Comentário Evento'] || '').replace(/\s+/g,' ')}</td>
+                                <td>${extrairNumeroOS(item['Comentário Evento'] || '')}</td>
+                                <td>${extrairDataSubmissao(item['Comentário Evento'] || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                </div>
+            `;
+            container.innerHTML = html;
+            popularControleColunasDashboard();
+            enforceDashboardComentarioWidth();
+        }
+
+        // Carregar dados da consulta
+        async function carregarConsulta() {
+            try {
+                const filters = {
+                    evento: document.getElementById('consultaEvento').value,
+                    cliente: document.getElementById('consultaCliente').value,
+                    status: document.getElementById('consultaStatus').value,
+                    consultor: document.getElementById('consultaConsultor').value,
+                    empresa: document.getElementById('consultaEmpresa').value
+                };
+
+                let query = supabase.from(tabelaBase).select('*');
+
+                if (filters.evento) query = query.ilike('Evento', `%${filters.evento}%`);
+                if (filters.cliente) query = query.ilike('Cliente', `%${filters.cliente}%`);
+                if (filters.status) query = query.eq('Status', filters.status);
+                if (filters.consultor) query = query.eq('Usuario Comentário', filters.consultor);
+                if (filters.empresa) query = query.ilike('Empresa', `%${filters.empresa}%`);
+
+                const { data, error } = await query;
+                if (error) throw error;
+
+                atualizarTabelaConsulta(data);
+                const sp = document.getElementById('consultaStatusPrazo');
+                if (sp && !sp._bound) {
+                    sp.addEventListener('change', () => atualizarTabelaConsulta(dadosCompletos));
+                    sp._bound = true;
+                }
+                
+            } catch (error) {
+                console.error('Erro na consulta:', error);
+            }
+        }
+
+        function limparFiltrosConsulta() {
+            const ids = ['consultaStatusPrazo','consultaSituacao','consultaEvento','consultaCliente','consultaStatus','consultaConsultor','consultaEmpresa'];
+            ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            carregarConsulta();
+        }
+
+        function extrairNumeroOS(texto) {
+            if (!texto) return '';
+            const t = String(texto);
+            let m = t.match(/O\s*\.?\s*S\s*\.?\s*[;:,.\-\s]*([0-9]{3,})/i);
+            if (m) return m[1];
+            m = t.match(/\bOS\b\s*[;:,.\-\s]*([0-9]{3,})/i);
+            if (m) return m[1];
+            m = t.match(/\bO\s*S\b\s*[;:,.\-\s]*([0-9]{3,})/i);
+            return m ? m[1] : '';
+        }
+
+        function extrairDataSubmissao(texto) {
+            if (!texto) return '';
+            const re = /Submiss[ãa]o[\s\S]*?(?:dia)?[\s;,-]*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i;
+            const m = texto.match(re);
+            return m ? m[1] : '';
+        }
+
+        function formatarConsultor(s) {
+            const t = String(s || '').trim();
+            if (!t) return '';
+            const m = t.match(/^\s*(\[[^\]]+\])\s*(.*)$/);
+            return m ? `${m[1].replace('[','')}<br>${m[2]}` : t;
+        }
+
+        function formatarDataDupla(s) {
+            if (!s) return '';
+            const d = new Date(s);
+            if (isNaN(d)) return '';
+            const data = d.toLocaleDateString('pt-BR');
+            const hora = d.toLocaleTimeString('pt-BR');
+            return `<span class="data-dupla">${data}<br>${hora}</span>`;
+        }
+
+        function diffToStr(ms) {
+            if (!ms || ms < 0) return '';
+            const dias = Math.floor(ms / (1000 * 60 * 60 * 24));
+            const horas = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            return `${dias}d ${horas}h`;
+        }
+
+        function getLimiteMs(consultorNome) {
+            const n = (consultorNome || '').toLowerCase();
+            if (n.includes('ana leya')) return 2 * 24 * 60 * 60 * 1000;
+            if (n.includes('daniel leite')) return 2 * 60 * 60 * 1000;
+            if (n.includes('giovana bruno')) return 14 * 24 * 60 * 60 * 1000;
+            return null;
+        }
+
+        function enriquecerConsulta(dados) {
+            const porEvento = {};
+            dados.forEach(item => {
+                const ev = item.Evento;
+                if (!porEvento[ev]) porEvento[ev] = [];
+                porEvento[ev].push(item);
+            });
+
+            const linhas = [];
+            Object.keys(porEvento).forEach(ev => {
+                const grupo = porEvento[ev].sort((a,b) => new Date(a['Data Ação']) - new Date(b['Data Ação']));
+                const idxGiovana = grupo
+                    .map((r,i) => ((r['Usuario Comentário']||'').toLowerCase().includes('giovana bruno') ? i : -1))
+                    .filter(i => i !== -1);
+
+                // Datas e status agregados por evento
+                const dataInclusaoMin = grupo.reduce((min, it) => {
+                    const d = it['Data Inclusão'] ? new Date(it['Data Inclusão']) : null;
+                    if (!d) return min;
+                    return (!min || d < min) ? d : min;
+                }, null);
+                const ultimo = grupo[grupo.length - 1] || {};
+                const dataUltimaAcao = ultimo['Data Ação'] ? new Date(ultimo['Data Ação']) : null;
+                const statusFinal = normalizarStatus(ultimo.Status);
+                let diasAberto = '';
+                let diasConcluidos = '';
+                if (dataInclusaoMin) {
+                    if (statusFinal === 'Aguardando' || statusFinal === 'Andamento') {
+                        const msOpen = Date.now() - dataInclusaoMin.getTime();
+                        diasAberto = Math.floor(msOpen / (1000 * 60 * 60 * 24));
+                    } else if (statusFinal === 'Sucesso' || statusFinal === 'Insucesso') {
+                        if (dataUltimaAcao) {
+                            const msDone = dataUltimaAcao.getTime() - dataInclusaoMin.getTime();
+                            diasConcluidos = Math.floor(msDone / (1000 * 60 * 60 * 24));
+                        }
+                    }
+                }
+
+                const usuarioAtual = ultimo['Usuário Atual'] || '';
+                const consultorUltimo = ultimo['Usuario Comentário'] || '';
+                const needsSynthetic = !!(usuarioAtual && usuarioAtual !== consultorUltimo && (statusFinal === 'Aguardando' || statusFinal === 'Andamento'));
+
+                grupo.forEach((item, i) => {
+                    const atual = new Date(item['Data Ação']);
+                    let ms = null;
+                    const nome = item['Usuario Comentário'] || '';
+                    const ultimoGiovana = idxGiovana.length ? idxGiovana[idxGiovana.length - 1] : -1;
+
+                    if (i === 0) {
+                        ms = null;
+                    } else {
+                        if ((nome.toLowerCase().includes('giovana bruno')) && i === ultimoGiovana) {
+                            const dataSubStr = extrairDataSubmissao(item['Comentário Evento'] || '');
+                            if (dataSubStr) {
+                                const partes = dataSubStr.split('/');
+                                const dataSub = new Date(parseInt(partes[2],10), parseInt(partes[1],10)-1, parseInt(partes[0],10));
+                                ms = atual - dataSub;
+                            }
+                        }
+                        if (ms === null) {
+                            const anterior = new Date(grupo[i-1]['Data Ação']);
+                            ms = atual - anterior;
+                        }
+                    }
+                    const statusNorm = normalizarStatus(item.Status);
+                    if (i === grupo.length - 1 && (statusNorm === 'Aguardando' || statusNorm === 'Andamento')) {
+                        ms = Date.now() - atual.getTime();
+                    }
+
+                    const limite = getLimiteMs(nome);
+                    const statusPrazo = (limite && ms != null) ? (ms > limite ? 'Fora do Prazo' : 'Dentro do Prazo') : '';
+                    const tempoAcoes = ms != null ? diffToStr(ms) : '';
+                    let situacao = '';
+                    if (!needsSynthetic && i === grupo.length - 1 && (statusNorm === 'Aguardando' || statusNorm === 'Andamento')) {
+                        situacao = statusPrazo === 'Fora do Prazo' ? 'Parado' : 'Em Andamento';
+                    }
+
+                    linhas.push({
+                        ...item,
+                        __tempoAcoes: tempoAcoes,
+                        __statusPrazo: statusPrazo,
+                        __tempoMs: ms,
+                        __diasAberto: diasAberto,
+                        __diasConcluidos: diasConcluidos,
+                        __situacao: situacao
+                    });
+                });
+
+                // Inserir linha sintética para Usuário Atual somente na última linha
+                if (needsSynthetic) {
+                    const statusNormFinal = normalizarStatus(ultimo.Status);
+                    if (statusNormFinal === 'Aguardando' || statusNormFinal === 'Andamento') {
+                        const baseData = dataUltimaAcao || new Date();
+                        const msAtual = Date.now() - baseData.getTime();
+                        const limAtual = getLimiteMs(usuarioAtual);
+                        const statusPrazoAtual = limAtual ? (msAtual > limAtual ? 'Fora do Prazo' : 'Dentro do Prazo') : '';
+                        const tempoAcoesAtual = diffToStr(msAtual);
+                        const situacaoAtual = statusPrazoAtual === 'Fora do Prazo' ? 'Parado' : 'Em Andamento';
+                        linhas.push({
+                            ...ultimo,
+                            'Usuario Comentário': usuarioAtual,
+                            'Comentário Evento': '',
+                            __tempoAcoes: tempoAcoesAtual,
+                            __statusPrazo: statusPrazoAtual,
+                            __tempoMs: msAtual,
+                            __diasAberto: diasAberto,
+                            __diasConcluidos: diasConcluidos,
+                            __situacao: situacaoAtual
+                        });
+                    }
+                }
+            });
+
+            // Ordenar final igual à ordenação original (por evento e data)
+            return linhas.sort((a,b) => {
+                if (a.Evento !== b.Evento) return (''+a.Evento).localeCompare(''+b.Evento);
+                return new Date(a['Data Ação']) - new Date(b['Data Ação']);
+            });
+        }
+
+        function normalizarStatus(s) {
+            const t = String(s || '').trim().toLowerCase();
+            if (!t) return '';
+            if (t.includes('insucesso') || t.includes('sem sucesso')) return 'Insucesso';
+            if (t.includes('sucesso')) return 'Sucesso';
+            if (t.includes('andament')) return 'Andamento';
+            if (t.includes('aguard')) return 'Aguardando';
+            return t.charAt(0).toUpperCase() + t.slice(1);
+        }
+
+        function atualizarTabelaConsulta(dados) {
+            const container = document.getElementById('tabelaConsulta');
+            
+            let linhas = enriquecerConsulta(dados);
+            const sp = document.getElementById('consultaStatusPrazo');
+            const filtroPrazo = sp ? sp.value : '';
+            if (filtroPrazo) {
+                linhas = linhas.filter(l => l.__statusPrazo === filtroPrazo);
+            }
+            const ss = document.getElementById('consultaSituacao');
+            const filtroSit = ss ? ss.value : '';
+            if (filtroSit) {
+                linhas = linhas.filter(l => l.__situacao === filtroSit);
+            }
+            const html = `
+                <div class="column-controls" id="consultaColumnControls">
+                    <label>Coluna</label>
+                    <select id="colSelectConsulta"></select>
+                    <button class="btn" onclick="ajustarLarguraConsulta(-20)">− largura</button>
+                    <button class="btn" onclick="ajustarLarguraConsulta(20)">+ largura</button>
+                    <label>Alinhamento</label>
+                    <select id="alignSelectConsulta">
+                        <option value="left">Esquerda</option>
+                        <option value="center" selected>Centro</option>
+                        <option value="right">Direita</option>
+                    </select>
+                    <button class="btn" onclick="aplicarAlinhamentoConsulta()">Aplicar</button>
+                    <button class="btn" onclick="resetarAjustesConsulta()">Resetar</button>
+                </div>
+                <div class="table-scroll consulta-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="sticky col-evento">Evento</th>
+                            <th class="sticky col-cliente">Cliente</th>
+                            <th class="sticky col-status">Status</th>
+                            <th class="sticky col-consultor">Consultor</th>
+                            <th class="sticky">Dias em Aberto</th>
+                            <th class="sticky">Dias Concluídos</th>
+                            <th class="sticky col-empresa">Empresa</th>
+                            <th class="sticky col-di">Data Inclusão</th>
+                            <th class="sticky col-enc">Encaminhamento</th>
+                            <th class="sticky col-tempo">Tempo Ações</th>
+                            <th class="sticky">Status Prazo</th>
+                            <th class="sticky col-situacao">Situação Evento</th>
+                            <th class="sticky col-comentario">Comentário Evento</th>
+                            <th>O.S</th>
+                            <th>Data de Submissão</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${linhas.map(item => `
+                            <tr>
+                                <td class="col-evento"><button class="btn" style="padding:4px 8px" onclick="abrirProcessoEvento('${String(item.Evento||'').replace(/'/g, "\\'")}')">${item.Evento || ''}</button></td>
+                                <td class="col-cliente">${item.Cliente || ''}</td>
+                                <td class="col-status">${item.Status || ''}</td>
+                                <td class="consultor-cell col-consultor">${formatarConsultor(item['Usuario Comentário'] || '')}</td>
+                                <td class="col-num">${item.__diasAberto ?? ''}</td>
+                                <td class="col-num">${item.__diasConcluidos ?? ''}</td>
+                                <td class="col-empresa">${(item.Empresa || '')
+                                    .replace('Normaq ', '')
+                                    .replace('Parnamirim', 'Natal')
+                                    .replace('Normaq', '')}</td>
+                                <td class="col-di">${formatarDataDupla(item['Data Inclusão'])}</td>
+                                <td class="col-enc">${formatarDataDupla(item['Data Ação'])}</td>
+                                <td class="col-tempo">${item.__tempoAcoes || ''}</td>
+                                <td><span class="status-prazo ${item.__statusPrazo === 'Fora do Prazo' ? 'atraso' : (item.__statusPrazo ? 'no-atraso' : '')}">${item.__statusPrazo || ''}</span></td>
+                                <td class="col-situacao"><span class="${item.__situacao === 'Parado' ? 'situacao-parado' : (item.__situacao === 'Em Andamento' ? 'situacao-andamento' : '')}">${item.__situacao || ''}</span></td>
+                                <td class="col-comentario" title="Clique para ver completo" onclick="abrirComentario(this)" data-comment="${encodeURIComponent(item['Comentário Evento'] || '')}">${(item['Comentário Evento'] || '').replace(/\s+/g,' ')}</td>
+                                <td>${extrairNumeroOS(item['Comentário Evento'] || '')}</td>
+                                <td>${extrairDataSubmissao(item['Comentário Evento'] || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                </div>
+                <div style="margin-top: 1rem; color: #666;">
+                    Total de registros: ${linhas.length}
+                </div>
+            `;
+            
+            container.innerHTML = html;
+            popularControleColunas();
+            enforceConsultaComentarioWidth();
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            initAuth();
+        });
+    </script>
+    </body>
+    </html>

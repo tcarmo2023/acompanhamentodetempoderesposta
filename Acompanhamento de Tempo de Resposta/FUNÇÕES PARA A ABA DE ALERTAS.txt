@@ -1,0 +1,269 @@
+// --- FUNÇÕES PARA A ABA DE ALERTAS ---
+        const TABELA_ALERTAS_CONFIG = 'alertas_config';
+        const TABELA_NOTIFICACOES = 'historico_notificacoes';
+
+        async function fetchAlertasConfigSupabase() {
+            try {
+                const { data, error } = await supabase
+                    .from(TABELA_ALERTAS_CONFIG)
+                    .select('*')
+                    .order('updated_at', { ascending: false });
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    return JSON.parse(localStorage.getItem('alertasConfig')) || [];
+                }
+                return data;
+            } catch (_) {
+                return JSON.parse(localStorage.getItem('alertasConfig')) || [];
+            }
+        }
+
+        async function upsertAlertaSupabase(alerta) {
+            try {
+                const payload = {
+                    usuario: alerta.usuario,
+                    email: alerta.email,
+                    dias: alerta.dias,
+                    ativo: alerta.ativo !== false,
+                    updated_at: new Date().toISOString()
+                };
+                const { error } = await supabase
+                    .from(TABELA_ALERTAS_CONFIG)
+                    .upsert(payload, { onConflict: 'usuario' })
+                    .select();
+                if (error) throw error;
+                return true;
+            } catch (_) {
+                const alertas = JSON.parse(localStorage.getItem('alertasConfig')) || [];
+                const i = alertas.findIndex(a => a.usuario === alerta.usuario);
+                if (i >= 0) alertas[i] = alerta; else alertas.push(alerta);
+                localStorage.setItem('alertasConfig', JSON.stringify(alertas));
+                return true;
+            }
+        }
+
+        async function deleteAlertaSupabase(usuario) {
+            try {
+                const { error } = await supabase
+                    .from(TABELA_ALERTAS_CONFIG)
+                    .delete()
+                    .eq('usuario', usuario);
+                if (error) throw error;
+                return true;
+            } catch (_) {
+                const alertas = JSON.parse(localStorage.getItem('alertasConfig')) || [];
+                const i = alertas.findIndex(a => a.usuario === usuario);
+                if (i >= 0) alertas.splice(i, 1);
+                localStorage.setItem('alertasConfig', JSON.stringify(alertas));
+                return true;
+            }
+        }
+
+        async function fetchHistoricoNotificacoesSupabase(limit = 100) {
+            try {
+                const { data, error } = await supabase
+                    .from(TABELA_NOTIFICACOES)
+                    .select('*')
+                    .order('data', { ascending: false })
+                    .limit(limit);
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    return JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                }
+                return data;
+            } catch (_) {
+                return JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+            }
+        }
+
+        async function insertHistoricoNotificacaoSupabase(record) {
+            const payload = {
+                tipo: record.tipo,
+                titulo: record.titulo,
+                mensagem: record.mensagem,
+                destinatario: record.destinatario,
+                usuario: record.usuario,
+                data: new Date().toISOString(),
+                enviado: !!record.enviado,
+                erro: record.erro || null,
+                quantidadeos: (record.quantidadeOS ?? record.quantidadeos ?? 0)
+            };
+            try {
+                const { error } = await supabase
+                    .from(TABELA_NOTIFICACOES)
+                    .insert(payload)
+                    .select();
+                if (error) throw error;
+                return true;
+            } catch (e) {
+                try {
+                    console.error('Falha ao salvar no Supabase (historico_notificacoes):', e);
+                    const msg = e?.message || e?.details || e?.hint || JSON.stringify(e);
+                    alert('Falha ao salvar histórico no Supabase: ' + msg + '\nUsando armazenamento local temporário.');
+                } catch(_) {}
+                const notificacoes = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                notificacoes.unshift({ ...payload, quantidadeOS: payload.quantidadeos, data: new Date().toLocaleString('pt-BR') });
+                localStorage.setItem('historicoNotificacoes', JSON.stringify(notificacoes));
+                return true;
+            }
+        }
+        async function importLocalToSupabase() {
+            try {
+                const localAlertas = JSON.parse(localStorage.getItem('alertasConfig')) || [];
+                for (const a of localAlertas) {
+                    await upsertAlertaSupabase({ usuario: a.usuario, email: a.email, dias: parseInt(a.dias), ativo: a.ativo !== false });
+                }
+                const localHistorico = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                for (const n of localHistorico) {
+                    await insertHistoricoNotificacaoSupabase({ tipo: n.tipo || 'importado', titulo: n.titulo || '', mensagem: n.mensagem || '', destinatario: n.destinatario || '', usuario: n.usuario || '', enviado: !!n.enviado, erro: n.erro || null, quantidadeOS: n.quantidadeOS || 0 });
+                }
+                const alertas = await fetchAlertasConfigSupabase();
+                const notificacoes = await fetchHistoricoNotificacoesSupabase();
+                renderAlertasAtivos(alertas);
+                renderHistoricoAlertas(notificacoes);
+                alert(`Importação concluída: ${localAlertas.length} alertas, ${localHistorico.length} notificações`);
+            } catch (e) {
+                alert('Falha na importação: ' + (e?.message || 'Erro'));
+            }
+        }
+        async function seedAlertasIfEmpty() {
+            try {
+                const supa = await fetchAlertasConfigSupabase();
+                if (supa && supa.length > 0) return supa;
+                const local = JSON.parse(localStorage.getItem('alertasConfig')) || [];
+                if (!local || local.length === 0) return supa || [];
+                for (const a of local) {
+                    await upsertAlertaSupabase({ usuario: a.usuario, email: a.email, dias: parseInt(a.dias), ativo: a.ativo !== false });
+                }
+                const loaded = await fetchAlertasConfigSupabase();
+                return loaded || [];
+            } catch (_) {
+                return JSON.parse(localStorage.getItem('alertasConfig')) || [];
+            }
+        }
+        async function seedHistoricoIfEmpty() {
+            try {
+                const supa = await fetchHistoricoNotificacoesSupabase();
+                if (supa && supa.length > 0) return supa;
+                const local = JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+                if (!local || local.length === 0) return supa || [];
+                for (const n of local) {
+                    await insertHistoricoNotificacaoSupabase({ tipo: n.tipo || 'importado', titulo: n.titulo || '', mensagem: n.mensagem || '', destinatario: n.destinatario || '', usuario: n.usuario || '', enviado: !!n.enviado, erro: n.erro || null, quantidadeOS: n.quantidadeOS || 0 });
+                }
+                const loaded = await fetchHistoricoNotificacoesSupabase();
+                return loaded || [];
+            } catch (_) {
+                return JSON.parse(localStorage.getItem('historicoNotificacoes')) || [];
+            }
+        }
+        async function loadAlertas() {
+            // Só carrega se tiver acesso liberado
+            if (!acessoAlertasLiberado) {
+                abrirModalSenha();
+                return;
+            }
+            let alertas = await fetchAlertasConfigSupabase();
+            let notificacoes = await fetchHistoricoNotificacoesSupabase();
+            if (!alertas || alertas.length === 0) alertas = await seedAlertasIfEmpty();
+            if (!notificacoes || notificacoes.length === 0) notificacoes = await seedHistoricoIfEmpty();
+
+            renderAlertasAtivos(alertas);
+            renderHistoricoAlertas(notificacoes);
+        }
+
+        // Envia um e-mail de teste com os dados selecionados
+        async function testarEnvioAlerta() {
+            try {
+                if (!acessoAlertasLiberado) {
+                    alert('Acesso negado. Digite a senha para usar os alertas.');
+                    return;
+                }
+                const usuarioEl = document.getElementById('alerta-usuario');
+                const emailEl = document.getElementById('alerta-email');
+            const usuario = usuarioEl ? usuarioEl.value : '';
+            const email = emailEl ? emailEl.value.trim() : '';
+            if (!usuario || !email) {
+                alert('Selecione um usuário e informe o e-mail para teste.');
+                return;
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email)) {
+                alert('E-mail inválido. Verifique o endereço.');
+                return;
+            }
+            const assunto = '🧪 Teste de envio de Alerta';
+            const mensagem = `Prezado(a) ${usuario},\n\nEste é um e-mail de teste do Sistema de Controle de Eventos.\nSe você recebeu este e-mail, a configuração do EmailJS está OK.\n\nAtenciosamente,\nSistema de Controle de Eventos`;
+            const resultado = await enviarEmailReal(email, assunto, mensagem);
+                if (resultado.success) {
+                    alert('E-mail de teste enviado com sucesso!');
+                } else {
+                    alert('Falha ao enviar e-mail de teste: ' + (resultado.error || 'Erro desconhecido'));
+                }
+                await insertHistoricoNotificacaoSupabase({
+                    tipo: 'teste_alerta',
+                    titulo: assunto,
+                    mensagem,
+                    destinatario: email,
+                    usuario,
+                    enviado: !!resultado.success,
+                    erro: resultado.error || null,
+                    quantidadeOS: 0
+                });
+                await seedHistoricoIfEmpty();
+                const notificacoes = await fetchHistoricoNotificacoesSupabase();
+                renderHistoricoAlertas(notificacoes);
+            } catch (err) {
+                console.error('Erro no teste de envio:', err);
+                alert('Erro inesperado no teste: ' + (err?.message || JSON.stringify(err)));
+            }
+        }
+
+        function renderAlertasAtivos(alertas) {
+            const container = document.getElementById('alertas-ativos');
+            
+            if (alertas.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nenhum alerta configurado</div>';
+                return;
+            }
+            
+            container.innerHTML = alertas.map((alerta, index) => `
+                <div class="alert-item">
+                    <div class="alert-info">
+                        <strong>${alerta.usuario}</strong><br>
+                        <small>E-mail: ${alerta.email} | Dias para alerta: ${alerta.dias}</small>
+                    </div>
+                    <div class="alert-actions">
+                        <span class="alert-status ${alerta.ativo ? 'alert-active' : 'alert-inactive'}">${alerta.ativo ? 'Ativo' : 'Inativo'}</span>
+                        <button class="btn btn-warning btn-sm" onclick="editarAlerta(${index})">Editar</button>
+                        <button class="btn btn-danger btn-sm" onclick="removerAlerta(${index})">Remover</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderHistoricoAlertas(notificacoes) {
+            const container = document.getElementById('historico-alertas');
+            
+            if (notificacoes.length === 0) {
+                container.innerHTML = '<div class="empty-state">Nenhuma notificação enviada</div>';
+                return;
+            }
+            
+            function formatarDataBr(v) {
+                try {
+                    const d = new Date(v);
+                    if (isNaN(d)) return String(v);
+                    const pad = n => String(n).padStart(2,'0');
+                    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                } catch(_) { return String(v); }
+            }
+
+            container.innerHTML = notificacoes.map(notificacao => `
+                <div class="alert-item">
+                    <div class="alert-info">
+                        <strong>${notificacao.titulo}</strong><br>
+                        <small>Para: ${notificacao.destinatario} | ${formatarDataBr(notificacao.data)} | ${notificacao.enviado ? 'Enviado' : 'Falha no envio'}</small>
+                        <p>${notificacao.mensagem}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
